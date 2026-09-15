@@ -101,7 +101,15 @@ class FirstRunWizard(ctk.CTkToplevel):
       1. Asks user to confirm / change songs folder
       2. Checks + installs Deno, ffmpeg, PO Token plugin
       3. Writes config and calls on_complete when done
+
+    Layout uses a strict 3-zone approach:
+      - HEADER  (fixed height, never shrinks)
+      - BODY    (scrollable content, expands to fill)
+      - FOOTER  (fixed height, buttons always visible)
     """
+
+    WIZARD_W = 660
+    WIZARD_H = 600
 
     def __init__(self, parent, config: dict, on_complete: Callable[[dict], None]):
         super().__init__(parent)
@@ -111,16 +119,15 @@ class FirstRunWizard(ctk.CTkToplevel):
         self.title("RiffVision — First Run Setup")
         self.resizable(False, False)
         self.configure(fg_color=PALETTE["bg_dark"])
-        self.grab_set()   # Modal
+        self.grab_set()
 
         # Center on screen, never off the top edge
         self.update_idletasks()
-        w, h = 620, 520
         screen_w = self.winfo_screenwidth()
         screen_h = self.winfo_screenheight()
-        x = max(0, (screen_w - w) // 2)
-        y = max(30, (screen_h - h) // 2)
-        self.geometry(f"{w}x{h}+{x}+{y}")
+        x = max(0, (screen_w - self.WIZARD_W) // 2)
+        y = max(30, (screen_h - self.WIZARD_H) // 2)
+        self.geometry(f"{self.WIZARD_W}x{self.WIZARD_H}+{x}+{y}")
 
         self._build_ui()
 
@@ -131,163 +138,277 @@ class FirstRunWizard(ctk.CTkToplevel):
     def _build_ui(self):
         P = PALETTE
 
-        # Header
-        header = ctk.CTkFrame(self, fg_color=P["bg_panel"], corner_radius=0, height=80)
-        header.pack(fill="x")
+        # ── HEADER ────────────────────────────────────────────────────
+        header = ctk.CTkFrame(
+            self,
+            fg_color=P["bg_panel"],
+            corner_radius=0,
+            height=90,
+        )
+        header.pack(fill="x", side="top")
         header.pack_propagate(False)
 
-        ctk.CTkLabel(
+        # Accent bar at very top
+        ctk.CTkFrame(
             header,
-            text="Welcome to RiffVision",
-            font=ctk.CTkFont(family="Segoe UI", size=22, weight="bold"),
+            fg_color=P["accent_blue"],
+            height=3,
+            corner_radius=0,
+        ).pack(fill="x", side="top")
+
+        title_block = ctk.CTkFrame(header, fg_color="transparent")
+        title_block.pack(fill="both", expand=True, padx=28)
+
+        name_row = ctk.CTkFrame(title_block, fg_color="transparent")
+        name_row.pack(side="left", fill="y")
+
+        ctk.CTkLabel(
+            name_row,
+            text="RIFF",
+            font=ctk.CTkFont(family="Segoe UI Black", size=28, weight="bold"),
             text_color=P["accent_blue"],
-        ).pack(side="left", padx=24, pady=18)
+        ).pack(side="left", pady=18)
 
         ctk.CTkLabel(
-            header,
-            text="v1.0",
-            font=ctk.CTkFont(family="Segoe UI", size=11),
+            name_row,
+            text="VISION",
+            font=ctk.CTkFont(family="Segoe UI Black", size=28, weight="bold"),
+            text_color=P["accent_cyan"],
+        ).pack(side="left")
+
+        ctk.CTkLabel(
+            title_block,
+            text="First Run Setup",
+            font=ctk.CTkFont(family="Segoe UI", size=13),
             text_color=P["text_dim"],
-        ).pack(side="right", padx=20)
+            anchor="e",
+        ).pack(side="right", pady=18)
 
-        # Body
-        body = ctk.CTkFrame(self, fg_color="transparent")
-        body.pack(fill="both", expand=True, padx=24, pady=(16, 0))
+        # ── FOOTER ────────────────────────────────────────────────────
+        # Built BEFORE body so pack order puts it at the bottom reliably
+        footer = ctk.CTkFrame(
+            self,
+            fg_color=P["bg_panel"],
+            corner_radius=0,
+            height=76,
+        )
+        footer.pack(fill="x", side="bottom")
+        footer.pack_propagate(False)
 
-        # -- Songs folder section --
-        ctk.CTkLabel(
-            body,
-            text="Clone Hero Songs Folder",
+        # Separator line at top of footer
+        ctk.CTkFrame(
+            footer,
+            fg_color=P["border"],
+            height=1,
+            corner_radius=0,
+        ).pack(fill="x", side="top")
+
+        btn_container = ctk.CTkFrame(footer, fg_color="transparent")
+        btn_container.pack(fill="both", expand=True, padx=24, pady=14)
+
+        self.install_btn = ctk.CTkButton(
+            btn_container,
+            text="⬇  Install All",
+            height=44,
             font=ctk.CTkFont(family="Segoe UI", size=13, weight="bold"),
-            text_color=P["text_primary"],
-            anchor="w",
-        ).pack(fill="x", pady=(0, 6))
+            fg_color=P["accent_blue"],
+            hover_color=P["accent_cyan"],
+            text_color="#000000",
+            corner_radius=8,
+            command=self._start_install,
+        )
+        self.install_btn.pack(side="left", fill="x", expand=True, padx=(0, 10))
+
+        self.done_btn = ctk.CTkButton(
+            btn_container,
+            text="Continue  →",
+            height=44,
+            font=ctk.CTkFont(family="Segoe UI", size=13, weight="bold"),
+            fg_color=P["success"],
+            hover_color="#00b85a",
+            text_color="#000000",
+            corner_radius=8,
+            state="disabled",
+            command=self._finish,
+        )
+        self.done_btn.pack(side="left", fill="x", expand=True)
+
+        # ── BODY (scrollable, fills between header and footer) ────────
+        body = ctk.CTkScrollableFrame(
+            self,
+            fg_color="transparent",
+            scrollbar_button_color=P["bg_card_hover"],
+            scrollbar_button_hover_color=P["accent_blue"],
+        )
+        body.pack(fill="both", expand=True, padx=0, pady=0)
+
+        inner = ctk.CTkFrame(body, fg_color="transparent")
+        inner.pack(fill="both", expand=True, padx=28, pady=(20, 16))
+
+        # ── Songs folder section ──────────────────────────────────────
+        self._section_label(inner, "Clone Hero Songs Folder")
 
         ctk.CTkLabel(
-            body,
-            text="Select the folder where your Clone Hero songs are stored.",
+            inner,
+            text="Set the folder where your Clone Hero songs are stored.",
             font=ctk.CTkFont(family="Segoe UI", size=11),
             text_color=P["text_secondary"],
             anchor="w",
-        ).pack(fill="x", pady=(0, 8))
+        ).pack(fill="x", pady=(0, 10))
 
-        folder_row = ctk.CTkFrame(body, fg_color="transparent")
-        folder_row.pack(fill="x", pady=(0, 16))
-
-        self.folder_var = ctk.StringVar(value=self.config.get("songs_folder", DEFAULT_SONGS_PATH))
-        self.folder_entry = ctk.CTkEntry(
-            folder_row,
-            textvariable=self.folder_var,
-            font=ctk.CTkFont(family="Segoe UI", size=11),
+        folder_card = ctk.CTkFrame(
+            inner,
             fg_color=P["bg_card"],
+            corner_radius=10,
             border_color=P["border"],
-            text_color=P["text_primary"],
-            height=36,
+            border_width=1,
         )
-        self.folder_entry.pack(side="left", fill="x", expand=True, padx=(0, 8))
+        folder_card.pack(fill="x", pady=(0, 22))
+
+        folder_inner = ctk.CTkFrame(folder_card, fg_color="transparent")
+        folder_inner.pack(fill="x", padx=14, pady=12)
+
+        self.folder_var = ctk.StringVar(
+            value=self.config.get("songs_folder", DEFAULT_SONGS_PATH)
+        )
+        self.folder_entry = ctk.CTkEntry(
+            folder_inner,
+            textvariable=self.folder_var,
+            font=ctk.CTkFont(family="Consolas", size=11),
+            fg_color=P["bg_dark"],
+            border_color=P["border"],
+            text_color=P["accent_cyan"],
+            height=38,
+        )
+        self.folder_entry.pack(side="left", fill="x", expand=True, padx=(0, 10))
 
         ctk.CTkButton(
-            folder_row,
+            folder_inner,
             text="Browse",
-            width=80,
-            height=36,
-            font=ctk.CTkFont(family="Segoe UI", size=11),
+            width=90,
+            height=38,
+            font=ctk.CTkFont(family="Segoe UI", size=11, weight="bold"),
             fg_color=P["accent_purple"],
             hover_color=P["accent_blue"],
+            corner_radius=6,
             command=self._browse_folder,
         ).pack(side="left")
 
-        # -- Dependency section --
-        ctk.CTkLabel(
-            body,
-            text="Dependencies",
-            font=ctk.CTkFont(family="Segoe UI", size=13, weight="bold"),
-            text_color=P["text_primary"],
-            anchor="w",
-        ).pack(fill="x", pady=(0, 6))
+        # ── Dependencies section ──────────────────────────────────────
+        self._section_label(inner, "Dependencies")
 
         ctk.CTkLabel(
-            body,
-            text="RiffVision needs Deno and ffmpeg. Click 'Install All' to set them up automatically.",
+            inner,
+            text="RiffVision needs Deno (JS runtime) and ffmpeg (audio processing).\nClick Install All below — they download automatically, no manual steps needed.",
             font=ctk.CTkFont(family="Segoe UI", size=11),
             text_color=P["text_secondary"],
-            wraplength=560,
             anchor="w",
             justify="left",
         ).pack(fill="x", pady=(0, 10))
 
         # Dep status cards
-        dep_frame = ctk.CTkFrame(body, fg_color=P["bg_card"], corner_radius=8)
-        dep_frame.pack(fill="x", pady=(0, 12))
+        dep_card = ctk.CTkFrame(
+            inner,
+            fg_color=P["bg_card"],
+            corner_radius=10,
+            border_color=P["border"],
+            border_width=1,
+        )
+        dep_card.pack(fill="x", pady=(0, 16))
 
         self.dep_labels = {}
-        for dep_name in ["Deno", "ffmpeg", "PO Token Plugin"]:
-            row = ctk.CTkFrame(dep_frame, fg_color="transparent")
-            row.pack(fill="x", padx=12, pady=4)
+        deps = [
+            ("Deno",           "JS challenge solver for YouTube"),
+            ("ffmpeg",         "Audio extraction for sync"),
+            ("PO Token Plugin","YouTube bot-detection bypass (optional)"),
+        ]
+
+        for i, (dep_name, dep_desc) in enumerate(deps):
+            row = ctk.CTkFrame(dep_card, fg_color="transparent")
+            row.pack(fill="x", padx=14, pady=(10 if i == 0 else 4, 10 if i == len(deps)-1 else 4))
+
+            left = ctk.CTkFrame(row, fg_color="transparent")
+            left.pack(side="left", fill="y")
+
             ctk.CTkLabel(
-                row,
+                left,
                 text=dep_name,
-                font=ctk.CTkFont(family="Segoe UI", size=11),
+                font=ctk.CTkFont(family="Segoe UI", size=12, weight="bold"),
                 text_color=P["text_primary"],
-                width=140,
                 anchor="w",
-            ).pack(side="left")
-            lbl = ctk.CTkLabel(
+                width=160,
+            ).pack(anchor="w")
+
+            ctk.CTkLabel(
+                left,
+                text=dep_desc,
+                font=ctk.CTkFont(family="Segoe UI", size=10),
+                text_color=P["text_dim"],
+                anchor="w",
+            ).pack(anchor="w")
+
+            status_lbl = ctk.CTkLabel(
                 row,
                 text="Checking...",
                 font=ctk.CTkFont(family="Segoe UI", size=11),
                 text_color=P["text_dim"],
-                anchor="w",
+                anchor="e",
             )
-            lbl.pack(side="left")
-            self.dep_labels[dep_name] = lbl
+            status_lbl.pack(side="right")
+            self.dep_labels[dep_name] = status_lbl
 
-        # Log area
+            # Divider between rows
+            if i < len(deps) - 1:
+                ctk.CTkFrame(
+                    dep_card,
+                    fg_color=P["border"],
+                    height=1,
+                    corner_radius=0,
+                ).pack(fill="x", padx=14)
+
+        # ── Install log ───────────────────────────────────────────────
+        self._section_label(inner, "Install Log")
+
         self.log_text = ctk.CTkTextbox(
-            body,
-            height=80,
+            inner,
+            height=100,
             font=ctk.CTkFont(family="Consolas", size=10),
-            fg_color=P["bg_panel"],
-            text_color=P["text_secondary"],
+            fg_color=P["bg_dark"],
+            text_color=P["accent_cyan"],
             border_color=P["border"],
             border_width=1,
+            corner_radius=8,
             state="disabled",
         )
-        self.log_text.pack(fill="x", pady=(0, 12))
-
-        # Buttons
-        btn_row = ctk.CTkFrame(body, fg_color="transparent")
-        btn_row.pack(fill="x", pady=(0, 8))
-
-        self.install_btn = ctk.CTkButton(
-            btn_row,
-            text="Install All",
-            width=130,
-            height=38,
-            font=ctk.CTkFont(family="Segoe UI", size=12, weight="bold"),
-            fg_color=P["accent_blue"],
-            hover_color=P["accent_cyan"],
-            text_color="#000000",
-            command=self._start_install,
-        )
-        self.install_btn.pack(side="left", padx=(0, 8))
-
-        self.done_btn = ctk.CTkButton(
-            btn_row,
-            text="Continue  →",
-            width=130,
-            height=38,
-            font=ctk.CTkFont(family="Segoe UI", size=12, weight="bold"),
-            fg_color=P["success"],
-            hover_color="#00b85a",
-            text_color="#000000",
-            state="disabled",
-            command=self._finish,
-        )
-        self.done_btn.pack(side="left")
+        self.log_text.pack(fill="x")
 
         # Kick off initial check
         self.after(200, self._run_initial_check)
+
+    # ------------------------------------------------------------------
+    # Helpers
+    # ------------------------------------------------------------------
+
+    def _section_label(self, parent, text: str):
+        """Styled section heading with an accent underline."""
+        P = PALETTE
+        frame = ctk.CTkFrame(parent, fg_color="transparent")
+        frame.pack(fill="x", pady=(0, 8))
+
+        ctk.CTkLabel(
+            frame,
+            text=text.upper(),
+            font=ctk.CTkFont(family="Segoe UI", size=10, weight="bold"),
+            text_color=P["accent_blue"],
+            anchor="w",
+        ).pack(fill="x")
+
+        ctk.CTkFrame(
+            frame,
+            fg_color=P["border"],
+            height=1,
+            corner_radius=0,
+        ).pack(fill="x", pady=(4, 0))
 
     # ------------------------------------------------------------------
     # Logic
@@ -316,9 +437,9 @@ class FirstRunWizard(ctk.CTkToplevel):
             if not lbl:
                 return
             if ok:
-                lbl.configure(text=f"OK  {detail}", text_color=PALETTE["success"])
+                lbl.configure(text=f"✓  {detail}", text_color=PALETTE["success"])
             else:
-                lbl.configure(text=f"Missing  {detail}", text_color=PALETTE["danger"])
+                lbl.configure(text=f"✗  Missing", text_color=PALETTE["danger"])
         self.after(0, _do)
 
     def _run_initial_check(self):
@@ -331,11 +452,11 @@ class FirstRunWizard(ctk.CTkToplevel):
 
     def _update_dep_ui(self, result: CheckResult):
         self._set_dep_status("Deno", result.deno.found,
-                             f"({result.deno.version})" if result.deno.found else "")
+                             result.deno.version.split()[0] if result.deno.found else "")
         self._set_dep_status("ffmpeg", result.ffmpeg.found,
-                             f"({result.ffmpeg.version[:30]})" if result.ffmpeg.found else "")
+                             "installed" if result.ffmpeg.found else "")
         self._set_dep_status("PO Token Plugin", result.pot_plugin.found,
-                             "(installed)" if result.pot_plugin.found else "(optional)")
+                             "installed" if result.pot_plugin.found else "optional")
 
     def _start_install(self):
         self.install_btn.configure(state="disabled", text="Installing...")
@@ -348,31 +469,35 @@ class FirstRunWizard(ctk.CTkToplevel):
                 self._log("Installing Deno...")
                 status = install_deno(progress_cb=self._log)
                 self._set_dep_status("Deno", status.found,
-                                     f"({status.version})" if status.found else f"({status.error})")
+                                     status.version.split()[0] if status.found else status.error[:40])
             else:
                 self._log(f"Deno already present: {result.deno.version}")
+                self._set_dep_status("Deno", True, result.deno.version.split()[0])
 
             if not result.ffmpeg.found:
                 self._log("Installing ffmpeg...")
                 status = install_ffmpeg(progress_cb=self._log)
                 self._set_dep_status("ffmpeg", status.found,
-                                     f"({status.version[:30]})" if status.found else f"({status.error})")
+                                     "installed" if status.found else status.error[:40])
             else:
-                self._log(f"ffmpeg already present.")
+                self._log("ffmpeg already present.")
+                self._set_dep_status("ffmpeg", True, "installed")
 
             if not result.pot_plugin.found:
                 self._log("Installing PO Token plugin...")
                 status = install_pot_plugin(progress_cb=self._log)
                 self._set_dep_status("PO Token Plugin", status.found,
-                                     "(installed)" if status.found else "(optional — failed)")
+                                     "installed" if status.found else "optional")
             else:
                 self._log("PO Token plugin already present.")
+                self._set_dep_status("PO Token Plugin", True, "installed")
 
             final = check_all()
-            self._log("Done." if final.all_ok else "Warning: some dependencies still missing.")
+            self._log("All done — ready to launch!" if final.all_ok
+                      else "Warning: some dependencies still missing.")
 
             def _ui_update():
-                self.install_btn.configure(state="normal", text="Install All")
+                self.install_btn.configure(state="normal", text="⬇  Install All")
                 if final.all_ok:
                     self.done_btn.configure(state="normal")
 

@@ -106,62 +106,80 @@ class MainWindow(ctk.CTk):
 
     def _build_header(self):
         P = PALETTE
-        hdr = ctk.CTkFrame(self, fg_color=P["bg_panel"], corner_radius=0, height=64)
+
+        # Outer header frame
+        hdr = ctk.CTkFrame(self, fg_color=P["bg_panel"], corner_radius=0, height=72)
         hdr.pack(fill="x", side="top")
         hdr.pack_propagate(False)
 
-        # Logo block
-        logo_frame = ctk.CTkFrame(hdr, fg_color="transparent")
-        logo_frame.pack(side="left", padx=18, pady=8)
+        # Electric blue accent line across the very top
+        ctk.CTkFrame(hdr, fg_color=P["accent_blue"], height=3, corner_radius=0).pack(
+            fill="x", side="top"
+        )
+
+        # Inner row — all content
+        row = ctk.CTkFrame(hdr, fg_color="transparent")
+        row.pack(fill="both", expand=True, padx=20)
+
+        # ── Logo ──────────────────────────────────────────────────────
+        logo_frame = ctk.CTkFrame(row, fg_color="transparent")
+        logo_frame.pack(side="left", fill="y")
 
         ctk.CTkLabel(
             logo_frame,
             text="RIFF",
-            font=ctk.CTkFont(family="Segoe UI Black", size=26, weight="bold"),
+            font=ctk.CTkFont(family="Segoe UI Black", size=28, weight="bold"),
             text_color=P["accent_blue"],
-        ).pack(side="left")
+        ).pack(side="left", pady=14)
 
         ctk.CTkLabel(
             logo_frame,
             text="VISION",
-            font=ctk.CTkFont(family="Segoe UI Black", size=26, weight="bold"),
+            font=ctk.CTkFont(family="Segoe UI Black", size=28, weight="bold"),
             text_color=P["accent_cyan"],
         ).pack(side="left")
 
+        # Divider pip
+        ctk.CTkFrame(
+            logo_frame, fg_color=P["border"], width=1, corner_radius=0
+        ).pack(side="left", fill="y", padx=16, pady=16)
+
         ctk.CTkLabel(
             logo_frame,
-            text="  Clone Hero Video Manager",
-            font=ctk.CTkFont(family="Segoe UI", size=12),
+            text="Clone Hero Video Manager",
+            font=ctk.CTkFont(family="Segoe UI", size=11),
             text_color=P["text_dim"],
-        ).pack(side="left", padx=(8, 0))
+        ).pack(side="left")
 
-        # Right-side controls
-        right = ctk.CTkFrame(hdr, fg_color="transparent")
-        right.pack(side="right", padx=14, pady=10)
+        # ── Right controls ────────────────────────────────────────────
+        right = ctk.CTkFrame(row, fg_color="transparent")
+        right.pack(side="right", fill="y", pady=14)
 
         self.folder_btn = ctk.CTkButton(
             right,
-            text="Change Folder",
-            width=120,
-            height=34,
+            text="⊙  Change Folder",
+            width=140,
+            height=36,
             font=ctk.CTkFont(family="Segoe UI", size=11),
             fg_color=P["bg_card"],
             hover_color=P["bg_card_hover"],
             border_color=P["border"],
             border_width=1,
             text_color=P["text_secondary"],
+            corner_radius=18,
             command=self._change_folder,
         )
         self.folder_btn.pack(side="left", padx=(0, 8))
 
         self.rescan_btn = ctk.CTkButton(
             right,
-            text="Rescan Songs",
-            width=110,
-            height=34,
-            font=ctk.CTkFont(family="Segoe UI", size=11),
+            text="↺  Rescan Songs",
+            width=140,
+            height=36,
+            font=ctk.CTkFont(family="Segoe UI", size=11, weight="bold"),
             fg_color=P["accent_purple"],
             hover_color=P["accent_blue"],
+            corner_radius=18,
             command=self._refresh_library,
         )
         self.rescan_btn.pack(side="left")
@@ -212,39 +230,59 @@ class MainWindow(ctk.CTk):
 
     def _build_statusbar(self):
         P = PALETTE
-        bar = ctk.CTkFrame(self, fg_color=P["bg_panel"], corner_radius=0, height=42)
+
+        # Outer bar
+        bar = ctk.CTkFrame(self, fg_color=P["bg_panel"], corner_radius=0, height=48)
         bar.pack(fill="x", side="bottom")
         bar.pack_propagate(False)
 
+        # Separator line at top of bar
+        ctk.CTkFrame(bar, fg_color=P["border"], height=1, corner_radius=0).pack(
+            fill="x", side="top"
+        )
+
+        inner = ctk.CTkFrame(bar, fg_color="transparent")
+        inner.pack(fill="both", expand=True, padx=16)
+
+        # Accent dot
+        ctk.CTkFrame(
+            inner,
+            fg_color=P["accent_blue"],
+            width=8,
+            height=8,
+            corner_radius=4,
+        ).pack(side="left", padx=(0, 10), pady=20)
+
         self.status_label = ctk.CTkLabel(
-            bar,
-            text="Ready  •  Select a song from the library",
+            inner,
+            text="Ready  —  select a song from the library to begin",
             font=ctk.CTkFont(family="Segoe UI", size=11),
             text_color=P["text_secondary"],
             anchor="w",
         )
-        self.status_label.pack(side="left", padx=16, pady=8)
+        self.status_label.pack(side="left", fill="x", expand=True)
 
-        self.progress_bar = ctk.CTkProgressBar(
-            bar,
-            width=220,
-            height=8,
-            fg_color=P["bg_card"],
-            progress_color=P["accent_blue"],
-            border_color=P["border"],
-        )
-        self.progress_bar.set(0)
-        self.progress_bar.pack(side="right", padx=16, pady=14)
-
-        # "Songs loaded" counter
+        # Song count badge
         self.song_count_label = ctk.CTkLabel(
-            bar,
+            inner,
             text="",
-            font=ctk.CTkFont(family="Segoe UI", size=11),
+            font=ctk.CTkFont(family="Segoe UI", size=10),
             text_color=P["text_dim"],
             anchor="e",
         )
-        self.song_count_label.pack(side="right", padx=(0, 12))
+        self.song_count_label.pack(side="right", padx=(0, 14))
+
+        # Progress bar
+        self.progress_bar = ctk.CTkProgressBar(
+            inner,
+            width=200,
+            height=6,
+            fg_color=P["bg_card"],
+            progress_color=P["accent_blue"],
+            corner_radius=3,
+        )
+        self.progress_bar.set(0)
+        self.progress_bar.pack(side="right", padx=(0, 14), pady=21)
 
     # ------------------------------------------------------------------
     # Status helpers (thread-safe)

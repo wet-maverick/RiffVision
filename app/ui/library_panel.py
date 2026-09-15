@@ -2,13 +2,6 @@
 library_panel.py
 ----------------
 Left-side song library panel.
-
-Features:
-  - Scrollable list of all songs found in the songs folder
-  - Live filter: type to narrow by artist or title
-  - Toggle: show only songs missing a background video
-  - Each row: color-coded video indicator dot + artist/title
-  - Click a row to select it (fires on_song_selected callback)
 """
 
 from __future__ import annotations
@@ -24,14 +17,14 @@ from app.core.song_scanner import SongEntry
 class LibraryPanel(ctk.CTkFrame):
     """Left panel: song library list with filter controls."""
 
-    PANEL_WIDTH = 320
+    PANEL_WIDTH = 330
 
     def __init__(self, parent, state, **kwargs):
         super().__init__(
             parent,
             width=self.PANEL_WIDTH,
             fg_color=PALETTE["bg_panel"],
-            corner_radius=10,
+            corner_radius=12,
             border_color=PALETTE["border"],
             border_width=1,
             **kwargs,
@@ -54,48 +47,70 @@ class LibraryPanel(ctk.CTkFrame):
     def _build_ui(self):
         P = PALETTE
 
-        # Header
-        hdr = ctk.CTkFrame(self, fg_color=P["bg_card"], corner_radius=8, height=44)
-        hdr.pack(fill="x", padx=10, pady=(10, 6))
+        # ── Panel header ──────────────────────────────────────────────
+        hdr = ctk.CTkFrame(self, fg_color=P["bg_card"], corner_radius=0, height=52)
+        hdr.pack(fill="x")
         hdr.pack_propagate(False)
 
+        # Top accent line
+        ctk.CTkFrame(hdr, fg_color=P["accent_purple"], height=2, corner_radius=0).pack(
+            fill="x", side="top"
+        )
+
+        hdr_inner = ctk.CTkFrame(hdr, fg_color="transparent")
+        hdr_inner.pack(fill="both", expand=True, padx=14)
+
         ctk.CTkLabel(
-            hdr,
-            text="Song Library",
-            font=ctk.CTkFont(family="Segoe UI", size=13, weight="bold"),
-            text_color=P["text_primary"],
+            hdr_inner,
+            text="LIBRARY",
+            font=ctk.CTkFont(family="Segoe UI Black", size=11, weight="bold"),
+            text_color=P["text_secondary"],
             anchor="w",
-        ).pack(side="left", padx=12, pady=10)
+        ).pack(side="left", fill="y")
+
+        # Count badge
+        self.count_badge = ctk.CTkFrame(
+            hdr_inner,
+            fg_color=P["accent_blue"],
+            corner_radius=10,
+            height=22,
+            width=38,
+        )
+        self.count_badge.pack(side="right", pady=14)
+        self.count_badge.pack_propagate(False)
 
         self.count_lbl = ctk.CTkLabel(
-            hdr,
+            self.count_badge,
             text="0",
-            font=ctk.CTkFont(family="Segoe UI", size=11),
-            text_color=P["text_dim"],
-            anchor="e",
+            font=ctk.CTkFont(family="Segoe UI", size=10, weight="bold"),
+            text_color="#000000",
         )
-        self.count_lbl.pack(side="right", padx=12)
+        self.count_lbl.pack(fill="both", expand=True)
 
-        # Search bar
+        # ── Search bar ────────────────────────────────────────────────
+        search_frame = ctk.CTkFrame(self, fg_color="transparent")
+        search_frame.pack(fill="x", padx=10, pady=(10, 4))
+
         self.search_var = ctk.StringVar()
         self.search_var.trace_add("write", lambda *_: self._apply_filter())
 
         search_entry = ctk.CTkEntry(
-            self,
+            search_frame,
             textvariable=self.search_var,
-            placeholder_text="Filter songs...",
+            placeholder_text="  Search songs...",
             font=ctk.CTkFont(family="Segoe UI", size=11),
             fg_color=P["bg_card"],
             border_color=P["border"],
             text_color=P["text_primary"],
             placeholder_text_color=P["text_dim"],
-            height=34,
+            height=36,
+            corner_radius=18,
         )
-        search_entry.pack(fill="x", padx=10, pady=(0, 4))
+        search_entry.pack(fill="x")
 
-        # "Missing video only" toggle
+        # ── Filter toggle ─────────────────────────────────────────────
         toggle_row = ctk.CTkFrame(self, fg_color="transparent")
-        toggle_row.pack(fill="x", padx=10, pady=(0, 6))
+        toggle_row.pack(fill="x", padx=12, pady=(2, 8))
 
         self.missing_only_var = ctk.BooleanVar(value=False)
         ctk.CTkCheckBox(
@@ -111,7 +126,7 @@ class LibraryPanel(ctk.CTkFrame):
             command=self._apply_filter,
         ).pack(side="left")
 
-        # Scrollable list
+        # ── Scrollable list ───────────────────────────────────────────
         self.scroll_frame = ctk.CTkScrollableFrame(
             self,
             fg_color="transparent",
@@ -125,7 +140,6 @@ class LibraryPanel(ctk.CTkFrame):
     # ------------------------------------------------------------------
 
     def refresh(self, songs: list[SongEntry]):
-        """Reload the full song list."""
         self._all_songs = songs
         self._selected_index = None
         self._apply_filter()
@@ -135,10 +149,8 @@ class LibraryPanel(ctk.CTkFrame):
         missing_only = self.missing_only_var.get()
 
         filtered = self._all_songs
-
         if missing_only:
             filtered = [s for s in filtered if not s.has_video]
-
         if query:
             filtered = [
                 s for s in filtered
@@ -149,8 +161,6 @@ class LibraryPanel(ctk.CTkFrame):
         self._render_list()
 
     def _render_list(self):
-        """Clear and re-render all visible song rows."""
-        # Destroy existing rows
         for child in self.scroll_frame.winfo_children():
             child.destroy()
         self._row_frames.clear()
@@ -158,11 +168,15 @@ class LibraryPanel(ctk.CTkFrame):
 
         P = PALETTE
         total = len(self._filtered_songs)
+
+        # Update count badge
         self.count_lbl.configure(text=str(total))
+        badge_color = P["accent_blue"] if total > 0 else P["text_dim"]
+        self.count_badge.configure(fg_color=badge_color)
 
         for idx, song in enumerate(self._filtered_songs):
             row = self._make_row(idx, song)
-            row.pack(fill="x", padx=2, pady=2)
+            row.pack(fill="x", padx=4, pady=2)
             self._row_frames.append(row)
 
         if not self._filtered_songs:
@@ -171,29 +185,32 @@ class LibraryPanel(ctk.CTkFrame):
                 text="No songs found",
                 font=ctk.CTkFont(family="Segoe UI", size=11),
                 text_color=P["text_dim"],
-            ).pack(pady=20)
+            ).pack(pady=30)
 
     def _make_row(self, idx: int, song: SongEntry) -> ctk.CTkFrame:
-        """Create a single song row frame."""
         P = PALETTE
 
         row = ctk.CTkFrame(
             self.scroll_frame,
             fg_color=P["bg_card"],
-            corner_radius=6,
-            height=52,
+            corner_radius=8,
+            height=58,
             cursor="hand2",
         )
         row.pack_propagate(False)
 
-        # Video indicator dot
-        dot_color = P["success"] if song.has_video else P["danger"]
-        dot = ctk.CTkFrame(row, width=6, height=6, fg_color=dot_color, corner_radius=3)
-        dot.place(x=8, rely=0.5, anchor="w")
+        # Left accent bar (colored by video status)
+        bar_color = P["success"] if song.has_video else P["danger"]
+        ctk.CTkFrame(
+            row,
+            fg_color=bar_color,
+            width=4,
+            corner_radius=2,
+        ).place(x=0, y=6, relheight=1, height=-12)
 
         # Text block
         text_frame = ctk.CTkFrame(row, fg_color="transparent")
-        text_frame.place(x=22, rely=0.5, anchor="w", relwidth=0.92)
+        text_frame.place(x=14, y=0, relwidth=0.95, relheight=1.0)
 
         artist_lbl = ctk.CTkLabel(
             text_frame,
@@ -202,7 +219,7 @@ class LibraryPanel(ctk.CTkFrame):
             text_color=P["text_secondary"],
             anchor="w",
         )
-        artist_lbl.pack(fill="x")
+        artist_lbl.place(x=0, y=10, relwidth=1.0)
 
         title_lbl = ctk.CTkLabel(
             text_frame,
@@ -211,12 +228,23 @@ class LibraryPanel(ctk.CTkFrame):
             text_color=P["text_primary"],
             anchor="w",
         )
-        title_lbl.pack(fill="x")
+        title_lbl.place(x=0, y=28, relwidth=1.0)
 
-        # Bind click on all sub-widgets
-        for widget in [row, text_frame, artist_lbl, title_lbl, dot]:
+        # Video badge on right
+        if song.has_video:
+            badge = ctk.CTkFrame(row, fg_color="#0a2a1a", corner_radius=4, width=20, height=14)
+            badge.place(relx=1.0, rely=0.5, x=-10, anchor="e")
+            ctk.CTkLabel(
+                badge,
+                text="▶",
+                font=ctk.CTkFont(family="Segoe UI", size=8),
+                text_color=P["success"],
+            ).place(relx=0.5, rely=0.5, anchor="center")
+
+        # Bind events on all child widgets
+        for widget in [row, text_frame, artist_lbl, title_lbl]:
             widget.bind("<Button-1>", lambda e, i=idx: self._select_row(i))
-            widget.bind("<Enter>", lambda e, r=row: self._on_hover(r, True))
+            widget.bind("<Enter>", lambda e, r=row, i=idx: self._on_hover(r, True, i))
             widget.bind("<Leave>", lambda e, r=row, i=idx: self._on_hover(r, False, i))
 
         return row
@@ -230,7 +258,7 @@ class LibraryPanel(ctk.CTkFrame):
             self._row_frames[self._selected_index].configure(fg_color=PALETTE["bg_card"])
 
         self._selected_index = idx
-        self._row_frames[idx].configure(fg_color=PALETTE["accent_blue"])
+        self._row_frames[idx].configure(fg_color="#0d2245")  # deep blue selected
 
         song = self._filtered_songs[idx]
         if self.on_song_selected:
@@ -238,7 +266,6 @@ class LibraryPanel(ctk.CTkFrame):
 
     def _on_hover(self, row: ctk.CTkFrame, entering: bool, idx: Optional[int] = None):
         is_selected = (idx is not None and idx == self._selected_index)
-        if entering and not is_selected:
-            row.configure(fg_color=PALETTE["bg_card_hover"])
-        elif not entering and not is_selected:
-            row.configure(fg_color=PALETTE["bg_card"])
+        if is_selected:
+            return
+        row.configure(fg_color=PALETTE["bg_card_hover"] if entering else PALETTE["bg_card"])
