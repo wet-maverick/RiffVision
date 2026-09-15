@@ -199,18 +199,20 @@ class LibraryPanel(ctk.CTkFrame):
         )
         row.pack_propagate(False)
 
-        # Left accent bar (colored by video status)
+        # ── Left accent bar ───────────────────────────────────────────
+        # Use a thin inner frame packed to the left — no .place() needed
         bar_color = P["success"] if song.has_video else P["danger"]
-        ctk.CTkFrame(
+        accent = ctk.CTkFrame(
             row,
             fg_color=bar_color,
             width=4,
             corner_radius=2,
-        ).place(x=0, y=6, relheight=1, height=-12)
+        )
+        accent.pack(side="left", fill="y", padx=(2, 0), pady=6)
 
-        # Text block
+        # ── Text block ────────────────────────────────────────────────
         text_frame = ctk.CTkFrame(row, fg_color="transparent")
-        text_frame.place(x=14, y=0, relwidth=0.95, relheight=1.0)
+        text_frame.pack(side="left", fill="both", expand=True, padx=(8, 4))
 
         artist_lbl = ctk.CTkLabel(
             text_frame,
@@ -219,7 +221,7 @@ class LibraryPanel(ctk.CTkFrame):
             text_color=P["text_secondary"],
             anchor="w",
         )
-        artist_lbl.place(x=0, y=10, relwidth=1.0)
+        artist_lbl.pack(fill="x", pady=(8, 0))
 
         title_lbl = ctk.CTkLabel(
             text_frame,
@@ -228,25 +230,33 @@ class LibraryPanel(ctk.CTkFrame):
             text_color=P["text_primary"],
             anchor="w",
         )
-        title_lbl.place(x=0, y=28, relwidth=1.0)
+        title_lbl.pack(fill="x")
 
-        # Video badge on right
+        # ── Video badge ───────────────────────────────────────────────
         if song.has_video:
-            badge = ctk.CTkFrame(row, fg_color="#0a2a1a", corner_radius=4, width=20, height=14)
-            badge.place(relx=1.0, rely=0.5, x=-10, anchor="e")
+            badge = ctk.CTkFrame(
+                row,
+                fg_color="#0a2a1a",
+                corner_radius=4,
+                width=22,
+                height=22,
+            )
+            badge.pack(side="right", padx=(0, 8))
+            badge.pack_propagate(False)
             ctk.CTkLabel(
                 badge,
                 text="▶",
                 font=ctk.CTkFont(family="Segoe UI", size=8),
                 text_color=P["success"],
-            ).place(relx=0.5, rely=0.5, anchor="center")
+            ).pack(expand=True)
 
-        # Bind events on all child widgets
-        for widget in [row, text_frame, artist_lbl, title_lbl]:
+        # ── Event bindings ────────────────────────────────────────────
+        for widget in [row, accent, text_frame, artist_lbl, title_lbl]:
             widget.bind("<Button-1>", lambda e, i=idx: self._select_row(i))
-            widget.bind("<Enter>", lambda e, r=row, i=idx: self._on_hover(r, True, i))
-            widget.bind("<Leave>", lambda e, r=row, i=idx: self._on_hover(r, False, i))
+            widget.bind("<Enter>",    lambda e, r=row, i=idx: self._on_hover(r, True, i))
+            widget.bind("<Leave>",    lambda e, r=row, i=idx: self._on_hover(r, False, i))
 
+        return row
         return row
 
     def _select_row(self, idx: int):
