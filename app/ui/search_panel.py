@@ -139,10 +139,15 @@ class VideoCard(ctk.CTkFrame):
         """Update the thumbnail image (called from main thread)."""
         if img is None:
             return
-        ctk_img = ctk.CTkImage(light_image=img, dark_image=img,
-                               size=(self.THUMB_W, self.THUMB_H))
-        self.thumb_label.configure(image=ctk_img, text="")
-        self.thumb_label._image = ctk_img   # prevent GC
+        try:
+            if not self.winfo_exists():
+                return
+            ctk_img = ctk.CTkImage(light_image=img, dark_image=img,
+                                   size=(self.THUMB_W, self.THUMB_H))
+            self.thumb_label.configure(image=ctk_img, text="")
+            self.thumb_label._image = ctk_img   # prevent GC
+        except Exception:
+            pass   # card was destroyed between the check and configure — ignore
 
 
 # ---------------------------------------------------------------------------
@@ -364,7 +369,13 @@ class SearchPanel(ctk.CTkFrame):
         def _fetch():
             img = fetch_thumbnail(video_id)
             if img:
-                self._safe_after(lambda: card.set_thumbnail(img))
+                def _apply():
+                    try:
+                        if card.winfo_exists():
+                            card.set_thumbnail(img)
+                    except Exception:
+                        pass
+                self._safe_after(_apply)
         threading.Thread(target=_fetch, daemon=True).start()
 
     def _video_chosen(self, video: VideoResult):
