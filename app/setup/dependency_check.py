@@ -218,10 +218,40 @@ def install_deno(progress_cb: Optional[Callable[[str], None]] = None) -> DepStat
         return DepStatus("Deno", False, error=str(exc))
 
 
+def _get_ffmpeg_windows_url(emit) -> str:
+    """
+    Resolve the current ffmpeg Windows zip URL via the GitHub releases API.
+    Looks for an essentials_build.zip asset in the latest release.
+    Falls back to a known-good pinned URL if the API is unreachable.
+    """
+    FALLBACK = (
+        "https://github.com/GyanD/codexffmpeg/releases/download/"
+        "7.1/ffmpeg-7.1-essentials_build.zip"
+    )
+    try:
+        api_url = "https://api.github.com/repos/GyanD/codexffmpeg/releases/latest"
+        req = urllib.request.Request(api_url, headers={"Accept": "application/vnd.github+json"})
+        with urllib.request.urlopen(req, timeout=10) as resp:
+            import json as _json
+            data = _json.loads(resp.read().decode())
+        assets = data.get("assets", [])
+        # Prefer essentials_build.zip; fall back to full_build.zip
+        for keyword in ["essentials_build.zip", "full_build.zip"]:
+            for asset in assets:
+                if asset["name"].endswith(keyword):
+                    emit(f"Resolved ffmpeg release: {asset['name']}")
+                    return asset["browser_download_url"]
+    except Exception as e:
+        emit(f"GitHub API lookup failed ({e}), using fallback URL")
+    return FALLBACK
+
+
 def install_ffmpeg(progress_cb: Optional[Callable[[str], None]] = None) -> DepStatus:
     """
     Download a static ffmpeg build into APP_DATA_DIR/ffmpeg/.
-    Uses gyan.dev builds for Windows, evermeet.cx for macOS, johnvansickle for Linux.
+    Windows: GyanD/codexffmpeg (URL resolved via GitHub API — version-proof)
+    macOS:   evermeet.cx static build
+    Linux:   johnvansickle.com static build
     """
     def emit(msg: str):
         if progress_cb:
@@ -232,19 +262,21 @@ def install_ffmpeg(progress_cb: Optional[Callable[[str], None]] = None) -> DepSt
 
     try:
         if system == "Windows":
-            url = "https://github.com/GyanD/codexffmpeg/releases/latest/download/ffmpeg-release-essentials.zip"
-            emit(f"Downloading ffmpeg (Windows) ...")
+            url = _get_ffmpeg_windows_url(emit)
+            emit("Downloading ffmpeg for Windows (this may take a minute)...")
             archive_path = FFMPEG_DIR / "ffmpeg.zip"
             urllib.request.urlretrieve(url, archive_path)
             emit("Extracting ffmpeg ...")
             with zipfile.ZipFile(archive_path, "r") as zf:
-                # The zip contains a versioned folder; find ffmpeg.exe inside bin/
+                # Versioned folder inside: e.g. ffmpeg-7.1-essentials_build/bin/ffmpeg.exe
                 names = zf.namelist()
                 ffmpeg_entry = next((n for n in names if n.endswith("bin/ffmpeg.exe")), None)
                 if ffmpeg_entry:
                     data = zf.read(ffmpeg_entry)
                     dest = FFMPEG_DIR / "ffmpeg.exe"
                     dest.write_bytes(data)
+                else:
+                    raise RuntimeError(f"ffmpeg.exe not found in zip. Entries: {names[:10]}")
             archive_path.unlink(missing_ok=True)
 
         elif system == "Darwin":

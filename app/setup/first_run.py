@@ -438,6 +438,9 @@ class FirstRunWizard(ctk.CTkToplevel):
                 return
             if ok:
                 lbl.configure(text=f"✓  {detail}", text_color=PALETTE["success"])
+            elif name == "PO Token Plugin":
+                # Optional dep — amber, not red
+                lbl.configure(text=f"○  {detail or 'optional'}", text_color=PALETTE["warning"])
             else:
                 lbl.configure(text=f"✗  Missing", text_color=PALETTE["danger"])
         self.after(0, _do)
@@ -455,6 +458,8 @@ class FirstRunWizard(ctk.CTkToplevel):
                              result.deno.version.split()[0] if result.deno.found else "")
         self._set_dep_status("ffmpeg", result.ffmpeg.found,
                              "installed" if result.ffmpeg.found else "")
+        # PO Token is optional — pass found=True with amber detail when missing
+        # so _set_dep_status uses the neutral amber branch, not red
         self._set_dep_status("PO Token Plugin", result.pot_plugin.found,
                              "installed" if result.pot_plugin.found else "optional")
 
