@@ -42,6 +42,7 @@ _DEFAULTS = {
     "max_results":        8,
     "query_template":     "{artist} {title} official music video",
     "auto_update_ytdlp":  True,
+    "cookie_browser":     "chrome",
 }
 
 

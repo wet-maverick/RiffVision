@@ -435,11 +435,13 @@ class MainWindow(ctk.CTk):
                     dest_folder=song.folder,
                     deno_path=self.app_state.deno_path,
                     progress_cb=self._set_progress,
+                    cookie_browser=self.app_state.config.get("cookie_browser", "chrome"),
                 )
             except RuntimeError as exc:
-                def _err():
-                    messagebox.showerror("Download Failed", str(exc))
-                    self._set_status(f"Download failed: {exc}", 0)
+                err_msg = str(exc)   # capture before exc goes out of scope
+                def _err(msg=err_msg):
+                    messagebox.showerror("Download Failed", msg)
+                    self._set_status(f"Download failed: {msg}", 0)
                 self._safe_after(_err)
                 return
 

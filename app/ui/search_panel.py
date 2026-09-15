@@ -281,10 +281,13 @@ class SearchPanel(ctk.CTkFrame):
 
         deno_path   = get_deno_path()
         max_results = int(self.app_state.config.get("max_results", 8))
+        cookie_browser = self.app_state.config.get("cookie_browser", "chrome")
 
         def _worker():
             try:
-                results = search_youtube(query, max_results=max_results, deno_path=deno_path)
+                results = search_youtube(query, max_results=max_results,
+                                         deno_path=deno_path,
+                                         cookie_browser=cookie_browser)
             except RuntimeError as exc:
                 def _err():
                     self._show_empty(f"Search failed: {exc}")

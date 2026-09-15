@@ -178,6 +178,50 @@ class SettingsPanel(ctk.CTkFrame):
             fill="x", pady=8
         )
 
+        # Cookie browser for age-gated videos
+        browser_row = ctk.CTkFrame(dl_inner, fg_color="transparent")
+        browser_row.pack(fill="x", pady=(0, 4))
+
+        ctk.CTkLabel(
+            browser_row,
+            text="Browser for cookies",
+            font=ctk.CTkFont(family="Segoe UI", size=12),
+            text_color=P["text_primary"],
+            anchor="w",
+        ).pack(side="left", fill="y")
+
+        self._browser_var = ctk.StringVar(
+            value=self.app_state.config.get("cookie_browser", "chrome")
+        )
+        ctk.CTkOptionMenu(
+            browser_row,
+            variable=self._browser_var,
+            values=["chrome", "firefox", "edge", "brave", "opera", "none"],
+            width=120, height=32,
+            fg_color=P["bg_panel"],
+            button_color=P["accent_blue"],
+            button_hover_color=P["accent_cyan"],
+            dropdown_fg_color=P["bg_card"],
+            dropdown_hover_color=P["bg_card_hover"],
+            text_color=P["text_primary"],
+            font=ctk.CTkFont(family="Segoe UI", size=11),
+            command=lambda _: self._save(),
+        ).pack(side="right")
+
+        ctk.CTkLabel(
+            dl_inner,
+            text="Used to bypass age-restricted videos. Pick the browser you use for YouTube.\n"
+                 "Select 'none' to disable (age-gated videos will fail to download).",
+            font=ctk.CTkFont(family="Segoe UI", size=10),
+            text_color=P["text_dim"],
+            anchor="w",
+            justify="left",
+        ).pack(fill="x", pady=(2, 0))
+
+        ctk.CTkFrame(dl_inner, fg_color=P["border"], height=1).pack(
+            fill="x", pady=8
+        )
+
         # Search query format
         query_row = ctk.CTkFrame(dl_inner, fg_color="transparent")
         query_row.pack(fill="x")
@@ -353,6 +397,7 @@ class SettingsPanel(ctk.CTkFrame):
         cfg["max_results"]        = int(self._max_results_var.get())
         cfg["query_template"]     = self._query_template_var.get()
         cfg["auto_update_ytdlp"]  = self._auto_update_var.get()
+        cfg["cookie_browser"]     = self._browser_var.get()
         save_config(cfg)
 
     def _manual_update_ytdlp(self):

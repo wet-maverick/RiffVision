@@ -93,11 +93,17 @@ class DownloadProgress:
 def _build_ydl_opts(
     deno_path: Optional[str] = None,
     extra: Optional[dict] = None,
+    cookie_browser: str = "chrome",
 ) -> dict:
     """
     Build yt-dlp options dict with EJS / Deno configuration.
     yt-dlp >= 2024.x expects js_runtimes as a dict {runtime: {config}}
     not a list. We set DENO_PATH env var so yt-dlp can locate the binary.
+
+    Cookie handling for age-gated videos:
+    We attempt to pass cookies from the user's browser automatically.
+    yt-dlp tries the specified browser and silently skips it if not found.
+    This bypasses age checks without storing any credentials.
     """
     opts: dict = {
         "quiet": True,
@@ -105,13 +111,15 @@ def _build_ydl_opts(
         "noprogress": True,
     }
 
-    # Point yt-dlp at our bundled Deno binary via env var
     if deno_path:
         os.environ["DENO_PATH"] = deno_path
 
-    # js_runtimes must be a dict: {runtime_name: {options_dict}}
-    # Empty dict = use all defaults for that runtime
     opts["js_runtimes"] = {"deno": {}}
+
+    # Pass browser cookies for age-gated content.
+    # No credentials are stored — yt-dlp reads the browser's cookie store directly.
+    if cookie_browser and cookie_browser != "none":
+        opts["cookiesfrombrowser"] = (cookie_browser,)
 
     if extra:
         opts.update(extra)
@@ -132,6 +140,7 @@ def search_youtube(
     query: str,
     max_results: int = 8,
     deno_path: Optional[str] = None,
+    cookie_browser: str = "chrome",
 ) -> list[VideoResult]:
     """
     Search YouTube using yt-dlp's ytsearch: prefix.
@@ -141,7 +150,7 @@ def search_youtube(
     opts = _build_ydl_opts(deno_path, {
         "extract_flat": True,
         "skip_download": True,
-    })
+    }, cookie_browser=cookie_browser)
 
     results: list[VideoResult] = []
 
@@ -236,6 +245,7 @@ def download_video(
     dest_folder: Path,
     deno_path: Optional[str] = None,
     progress_cb: Optional[Callable[[DownloadProgress], None]] = None,
+    cookie_browser: str = "chrome",
 ) -> Path:
     """
     Download a YouTube video to dest_folder/video.mp4.
@@ -329,7 +339,7 @@ def download_video(
             "key": "FFmpegVideoConvertor",
             "preferedformat": "mp4",
         }],
-    })
+    }, cookie_browser=cookie_browser)
 
     if ffmpeg_dir:
         opts["ffmpeg_location"] = ffmpeg_dir
