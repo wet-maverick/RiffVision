@@ -36,6 +36,7 @@ from app.core.ini_writer import write_video_start_time
 from app.ui.library_panel import LibraryPanel
 from app.ui.search_panel import SearchPanel
 from app.ui.offset_panel import OffsetPanel
+from app.ui.banner import BannerCanvas, BANNER_H
 
 
 # ---------------------------------------------------------------------------
@@ -99,6 +100,15 @@ class MainWindow(ctk.CTk):
 
         # ── Initial scan ───────────────────────────────────────────────────
         self.after(100, self._refresh_library)
+        self.protocol("WM_DELETE_WINDOW", self._on_close)
+
+    def _on_close(self):
+        """Clean shutdown — stop banner animation before destroying."""
+        try:
+            self._banner.stop()
+        except Exception:
+            pass
+        self.destroy()
 
     # ------------------------------------------------------------------
     # UI Construction
@@ -107,66 +117,50 @@ class MainWindow(ctk.CTk):
     def _build_header(self):
         P = PALETTE
 
-        # Outer header frame
-        hdr = ctk.CTkFrame(self, fg_color=P["bg_panel"], corner_radius=0, height=72)
+        # Outer container — height = banner + controls row
+        hdr = ctk.CTkFrame(self, fg_color=P["bg_panel"], corner_radius=0)
         hdr.pack(fill="x", side="top")
-        hdr.pack_propagate(False)
 
-        # Electric blue accent line across the very top
-        ctk.CTkFrame(hdr, fg_color=P["accent_blue"], height=3, corner_radius=0).pack(
-            fill="x", side="top"
-        )
+        # ── Animated banner (full width, fixed height) ─────────────────
+        # BannerCanvas is a tk.Canvas that animates at ~30fps
+        self._banner = BannerCanvas(hdr, width=1280, height=BANNER_H)
+        self._banner.pack(fill="x", expand=True)
 
-        # Inner row — all content
-        row = ctk.CTkFrame(hdr, fg_color="transparent")
-        row.pack(fill="both", expand=True, padx=20)
+        # Make banner resize with window
+        def _on_resize(e):
+            self._banner.configure(width=e.width)
+        hdr.bind("<Configure>", _on_resize)
 
-        # ── Logo ──────────────────────────────────────────────────────
-        logo_frame = ctk.CTkFrame(row, fg_color="transparent")
-        logo_frame.pack(side="left", fill="y")
+        # ── Controls row below the banner ─────────────────────────────
+        ctrl = ctk.CTkFrame(hdr, fg_color=P["bg_card"], corner_radius=0, height=44)
+        ctrl.pack(fill="x")
+        ctrl.pack_propagate(False)
 
-        ctk.CTkLabel(
-            logo_frame,
-            text="RIFF",
-            font=ctk.CTkFont(family="Segoe UI Black", size=28, weight="bold"),
-            text_color=P["accent_blue"],
-        ).pack(side="left", pady=14)
-
-        ctk.CTkLabel(
-            logo_frame,
-            text="VISION",
-            font=ctk.CTkFont(family="Segoe UI Black", size=28, weight="bold"),
-            text_color=P["accent_cyan"],
-        ).pack(side="left")
-
-        # Divider pip
-        ctk.CTkFrame(
-            logo_frame, fg_color=P["border"], width=1, corner_radius=0
-        ).pack(side="left", fill="y", padx=16, pady=16)
-
-        ctk.CTkLabel(
-            logo_frame,
-            text="Clone Hero Video Manager",
-            font=ctk.CTkFont(family="Segoe UI", size=11),
+        # Folder path display
+        self._folder_lbl = ctk.CTkLabel(
+            ctrl,
+            text=f"  {self.state.songs_folder}",
+            font=ctk.CTkFont(family="Consolas", size=10),
             text_color=P["text_dim"],
-        ).pack(side="left")
+            anchor="w",
+        )
+        self._folder_lbl.pack(side="left", fill="x", expand=True, padx=(12, 0))
 
-        # ── Right controls ────────────────────────────────────────────
-        right = ctk.CTkFrame(row, fg_color="transparent")
-        right.pack(side="right", fill="y", pady=14)
+        right = ctk.CTkFrame(ctrl, fg_color="transparent")
+        right.pack(side="right", padx=10, pady=6)
 
         self.folder_btn = ctk.CTkButton(
             right,
             text="⊙  Change Folder",
             width=140,
-            height=36,
+            height=32,
             font=ctk.CTkFont(family="Segoe UI", size=11),
-            fg_color=P["bg_card"],
+            fg_color=P["bg_panel"],
             hover_color=P["bg_card_hover"],
             border_color=P["border"],
             border_width=1,
             text_color=P["text_secondary"],
-            corner_radius=18,
+            corner_radius=16,
             command=self._change_folder,
         )
         self.folder_btn.pack(side="left", padx=(0, 8))
@@ -175,11 +169,11 @@ class MainWindow(ctk.CTk):
             right,
             text="↺  Rescan Songs",
             width=140,
-            height=36,
+            height=32,
             font=ctk.CTkFont(family="Segoe UI", size=11, weight="bold"),
             fg_color=P["accent_purple"],
             hover_color=P["accent_blue"],
-            corner_radius=18,
+            corner_radius=16,
             command=self._refresh_library,
         )
         self.rescan_btn.pack(side="left")
@@ -469,4 +463,5 @@ class MainWindow(ctk.CTk):
         if chosen:
             self.state.config["songs_folder"] = chosen
             save_config(self.state.config)
+            self._folder_lbl.configure(text=f"  {chosen}")
             self._refresh_library()
