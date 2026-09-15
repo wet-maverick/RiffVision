@@ -109,16 +109,18 @@ class FirstRunWizard(ctk.CTkToplevel):
         self.on_complete = on_complete
 
         self.title("RiffVision — First Run Setup")
-        self.geometry("620x520")
         self.resizable(False, False)
         self.configure(fg_color=PALETTE["bg_dark"])
         self.grab_set()   # Modal
 
-        # Center on parent
+        # Center on screen, never off the top edge
         self.update_idletasks()
-        px = parent.winfo_x() + (parent.winfo_width() // 2) - 310
-        py = parent.winfo_y() + (parent.winfo_height() // 2) - 260
-        self.geometry(f"+{px}+{py}")
+        w, h = 620, 520
+        screen_w = self.winfo_screenwidth()
+        screen_h = self.winfo_screenheight()
+        x = max(0, (screen_w - w) // 2)
+        y = max(30, (screen_h - h) // 2)
+        self.geometry(f"{w}x{h}+{x}+{y}")
 
         self._build_ui()
 

@@ -16,6 +16,25 @@ import sys
 import os
 
 
+def _set_dpi_awareness():
+    """
+    Tell Windows to render at native DPI instead of letting it scale/blur.
+    This prevents the window from being positioned off-screen on high-DPI
+    displays and ensures geometry coordinates are in real pixels.
+    Must be called before any Tk window is created.
+    """
+    if sys.platform == "win32":
+        try:
+            from ctypes import windll
+            # Per-monitor DPI aware (best for multi-monitor setups)
+            windll.shcore.SetProcessDpiAwareness(2)
+        except Exception:
+            try:
+                windll.user32.SetProcessDPIAware()
+            except Exception:
+                pass
+
+
 def _check_python_version():
     if sys.version_info < (3, 10):
         print(
@@ -28,6 +47,7 @@ def _check_python_version():
 
 
 def main():
+    _set_dpi_awareness()
     _check_python_version()
 
     # ── Imports after version check ────────────────────────────────────

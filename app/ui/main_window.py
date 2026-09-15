@@ -72,9 +72,17 @@ class MainWindow(ctk.CTk):
 
         # ── Window chrome ──────────────────────────────────────────────────
         self.title("RiffVision")
-        self.geometry("1280x780")
         self.minsize(1000, 640)
         self.configure(fg_color=PALETTE["bg_dark"])
+
+        # Center window on screen, respecting Windows DPI and taskbar
+        self.update_idletasks()
+        w, h = 1280, 780
+        screen_w = self.winfo_screenwidth()
+        screen_h = self.winfo_screenheight()
+        x = max(0, (screen_w - w) // 2)
+        y = max(30, (screen_h - h) // 2)   # never go above y=30 (hides title bar)
+        self.geometry(f"{w}x{h}+{x}+{y}")
 
         ctk.set_appearance_mode("dark")
         ctk.set_default_color_theme("blue")
