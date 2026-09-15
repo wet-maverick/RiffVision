@@ -14,6 +14,3 @@ soundfile>=0.12.1
 
 # HTTP requests (thumbnail fetching)
 requests>=2.31.0
-
-# ffmpeg-python wrapper (audio extraction)
-ffmpeg-python>=0.2.0

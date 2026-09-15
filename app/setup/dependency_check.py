@@ -286,7 +286,15 @@ def install_ffmpeg(progress_cb: Optional[Callable[[str], None]] = None) -> DepSt
             urllib.request.urlretrieve(url, archive_path)
             emit("Extracting ffmpeg ...")
             with zipfile.ZipFile(archive_path, "r") as zf:
-                zf.extractall(FFMPEG_DIR)
+                # Safe extraction: only extract entries whose resolved path
+                # stays inside FFMPEG_DIR — prevents path traversal if the
+                # archive were ever maliciously crafted.
+                for member in zf.infolist():
+                    member_path = (FFMPEG_DIR / member.filename).resolve()
+                    if not str(member_path).startswith(str(FFMPEG_DIR.resolve())):
+                        emit(f"Skipping suspicious archive entry: {member.filename}")
+                        continue
+                    zf.extract(member, FFMPEG_DIR)
             archive_path.unlink(missing_ok=True)
             ffmpeg_bin = FFMPEG_DIR / "ffmpeg"
             if ffmpeg_bin.exists():
@@ -324,14 +332,16 @@ def install_ffmpeg(progress_cb: Optional[Callable[[str], None]] = None) -> DepSt
 
 
 def install_pot_plugin(progress_cb: Optional[Callable[[str], None]] = None) -> DepStatus:
-    """pip install bgutil-ytdlp-pot-provider."""
+    """pip install bgutil-ytdlp-pot-provider (pinned to known-good major version)."""
     def emit(msg: str):
         if progress_cb:
             progress_cb(msg)
 
+    # Pinned to major version 1.x — allows patch updates but prevents
+    # silent major-version upgrades that could introduce breaking changes.
     emit("Installing PO Token plugin ...")
     ok, out = _run(
-        [sys.executable, "-m", "pip", "install", "-q", "bgutil-ytdlp-pot-provider"],
+        [sys.executable, "-m", "pip", "install", "-q", "bgutil-ytdlp-pot-provider>=1.0,<2.0"],
         timeout=120,
     )
     if ok:
