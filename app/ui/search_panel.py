@@ -142,7 +142,7 @@ class SearchPanel(ctk.CTkFrame):
 
     def __init__(self, parent, state, status_cb: Callable[[str, float], None], **kwargs):
         super().__init__(parent, fg_color="transparent", **kwargs)
-        self.state = state
+        self.app_state = state
         self.status_cb = status_cb
         self._current_song: Optional[SongEntry] = None
         self._cards: list[VideoCard] = []
@@ -150,6 +150,14 @@ class SearchPanel(ctk.CTkFrame):
         self.on_video_selected: Optional[Callable[[VideoResult], None]] = None
 
         self._build_ui()
+
+    def _safe_after(self, fn):
+        """Post fn() to the main thread only if this widget still exists."""
+        try:
+            if self.winfo_exists():
+                self.after(0, fn)
+        except Exception:
+            pass
 
     # ------------------------------------------------------------------
     # UI Construction
@@ -255,16 +263,14 @@ class SearchPanel(ctk.CTkFrame):
                     self._show_empty(f"Search failed: {exc}")
                     self.search_btn.configure(state="normal", text="Search")
                     self.status_cb(f"Search failed: {exc}", 0)
-                self.after(0, _err)
+                self._safe_after(_err)
                 return
 
             def _show():
                 self._display_results(results)
                 self.search_btn.configure(state="normal", text="Search")
-                self.status_cb(
-                    f"Found {len(results)} results for: {query}", 0
-                )
-            self.after(0, _show)
+                self.status_cb(f"Found {len(results)} results for: {query}", 0)
+            self._safe_after(_show)
 
         threading.Thread(target=_worker, daemon=True).start()
 
@@ -327,7 +333,7 @@ class SearchPanel(ctk.CTkFrame):
         def _fetch():
             img = fetch_thumbnail(video_id)
             if img:
-                self.after(0, lambda: card.set_thumbnail(img))
+                self._safe_after(lambda: card.set_thumbnail(img))
         threading.Thread(target=_fetch, daemon=True).start()
 
     def _video_chosen(self, video: VideoResult):

@@ -187,9 +187,15 @@ class BannerCanvas(tk.Canvas):
     def _tick(self):
         if not self._running:
             return
-        t = time.time() - self._start
-        self._render(t)
-        self._frame += 1
+        try:
+            if not self.winfo_exists():
+                self._running = False
+                return
+            t = time.time() - self._start
+            self._render(t)
+            self._frame += 1
+        except Exception:
+            pass
         self.after(MS, self._tick)
 
     def stop(self):
@@ -370,8 +376,10 @@ class BannerCanvas(tk.Canvas):
 
     def _draw_particles(self, draw):
         for p in self._particles:
+            if p.life <= 0.02:
+                continue
             a = int(p.life * 220)
-            r = p.size * p.life
+            r = max(0.5, p.size * p.life)   # never go below 0.5 — prevents x1 < x0
             draw.ellipse([p.x - r, p.y - r, p.x + r, p.y + r],
                          fill=(*p.color, a))
 

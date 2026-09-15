@@ -30,7 +30,7 @@ class LibraryPanel(ctk.CTkFrame):
             **kwargs,
         )
         self.pack_propagate(False)
-        self.state = state
+        self.app_state = state
         self.on_song_selected: Optional[Callable[[SongEntry], None]] = None
 
         self._all_songs: list[SongEntry] = []

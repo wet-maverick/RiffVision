@@ -33,7 +33,7 @@ class OffsetPanel(ctk.CTkFrame):
 
     def __init__(self, parent, state, status_cb: Callable[[str], None], **kwargs):
         super().__init__(parent, fg_color="transparent", **kwargs)
-        self.state = state
+        self.app_state = state
         self.status_cb = status_cb
         self._song: Optional[SongEntry] = None
         self._sync_result: Optional[SyncResult] = None
@@ -42,6 +42,14 @@ class OffsetPanel(ctk.CTkFrame):
 
         self._build_ui()
         self._show_idle()
+
+    def _safe_after(self, fn):
+        """Post fn() to the main thread only if this widget still exists."""
+        try:
+            if self.winfo_exists():
+                self.after(0, fn)
+        except Exception:
+            pass
 
     # ------------------------------------------------------------------
     # UI Construction
@@ -354,7 +362,7 @@ class OffsetPanel(ctk.CTkFrame):
         """Populate panel after successful download + sync."""
         self._song = song
         self._sync_result = result
-        self.state.sync_result = result
+        self.app_state.sync_result = result
 
         # Populate detected info
         self.song_name_lbl.configure(text=song.display_name)
@@ -460,14 +468,6 @@ class OffsetPanel(ctk.CTkFrame):
                 ffmpeg_path=ffmpeg,
                 progress_cb=self._log,
             )
-            self.after(0, lambda: self.show_result(self._song, result))
+            self._safe_after(lambda: self.show_result(self._song, result))
 
         threading.Thread(target=_worker, daemon=True).start()
-
-    @property
-    def state(self):
-        return self._state
-
-    @state.setter
-    def state(self, value):
-        self._state = value

@@ -69,7 +69,7 @@ class MainWindow(ctk.CTk):
     def __init__(self, config: dict):
         super().__init__()
 
-        self.state = AppState(config)
+        self.app_state = AppState(config)
 
         # ── Window chrome ──────────────────────────────────────────────────
         self.title("RiffVision")
@@ -110,6 +110,18 @@ class MainWindow(ctk.CTk):
             pass
         self.destroy()
 
+    def _safe_after(self, fn):
+        """
+        Schedule fn() on the main thread only if this window still exists.
+        Prevents 'invalid command name' errors when a background thread
+        tries to post a callback after the window has been destroyed.
+        """
+        try:
+            if self.winfo_exists():
+                self.after(0, fn)
+        except Exception:
+            pass
+
     # ------------------------------------------------------------------
     # UI Construction
     # ------------------------------------------------------------------
@@ -139,7 +151,7 @@ class MainWindow(ctk.CTk):
         # Folder path display
         self._folder_lbl = ctk.CTkLabel(
             ctrl,
-            text=f"  {self.state.songs_folder}",
+            text=f"  {self.app_state.songs_folder}",
             font=ctk.CTkFont(family="Consolas", size=10),
             text_color=P["text_dim"],
             anchor="w",
@@ -183,7 +195,7 @@ class MainWindow(ctk.CTk):
         body.pack(fill="both", expand=True, padx=0, pady=0)
 
         # Left: library (fixed width)
-        self.library_panel = LibraryPanel(body, self.state)
+        self.library_panel = LibraryPanel(body, self.app_state)
         self.library_panel.pack(side="left", fill="y", padx=(12, 6), pady=12)
 
         # Right: tabbed view
@@ -210,14 +222,14 @@ class MainWindow(ctk.CTk):
 
         self.search_panel = SearchPanel(
             self.tab_view.tab("Search YouTube"),
-            self.state,
+            self.app_state,
             status_cb=self._set_status,
         )
         self.search_panel.pack(fill="both", expand=True)
 
         self.offset_panel = OffsetPanel(
             self.tab_view.tab("Sync & Offset"),
-            self.state,
+            self.app_state,
             status_cb=self._set_status,
         )
         self.offset_panel.pack(fill="both", expand=True)
@@ -283,7 +295,7 @@ class MainWindow(ctk.CTk):
     # ------------------------------------------------------------------
 
     def _set_status(self, message: str, progress: float = -1):
-        """Update status bar. progress=-1 keeps current bar value."""
+        """Update status bar. progress=-1 keeps current bar value. Thread-safe."""
         def _do():
             self.status_label.configure(text=message)
             if 0 <= progress <= 1:
@@ -292,10 +304,10 @@ class MainWindow(ctk.CTk):
             elif progress == 1.0:
                 self.progress_bar.set(1.0)
                 self.progress_bar.configure(progress_color=PALETTE["success"])
-        self.after(0, _do)
+        self._safe_after(_do)
 
     def _set_progress(self, dp: DownloadProgress):
-        """Handle DownloadProgress from the downloader thread."""
+        """Handle DownloadProgress from the downloader thread. Thread-safe."""
         def _do():
             pct = dp.percent / 100.0
             self.progress_bar.set(pct)
@@ -307,20 +319,17 @@ class MainWindow(ctk.CTk):
                     text=f"Downloading...  {dp.percent:.0f}%{speed}{eta}"
                 )
                 self.progress_bar.configure(progress_color=PALETTE["accent_blue"])
-
             elif dp.status == "processing":
                 self.status_label.configure(text="Processing video (muxing)...")
                 self.progress_bar.configure(progress_color=PALETTE["accent_cyan"])
-
             elif dp.status == "done":
                 self.status_label.configure(text="Download complete!")
                 self.progress_bar.configure(progress_color=PALETTE["success"])
-
             elif dp.status == "error":
                 self.status_label.configure(text=f"Download error: {dp.error}")
                 self.progress_bar.configure(progress_color=PALETTE["danger"])
 
-        self.after(0, _do)
+        self._safe_after(_do)
 
     # ------------------------------------------------------------------
     # Library refresh
@@ -331,8 +340,8 @@ class MainWindow(ctk.CTk):
         self.rescan_btn.configure(state="disabled", text="Scanning...")
 
         def _scan():
-            songs = scan_songs(self.state.songs_folder)
-            self.state.songs = songs
+            songs = scan_songs(self.app_state.songs_folder)
+            self.app_state.songs = songs
 
             def _done():
                 self.library_panel.refresh(songs)
@@ -345,9 +354,9 @@ class MainWindow(ctk.CTk):
                     f"Loaded {total} songs  ({missing} missing video)",
                     progress=0,
                 )
-                self.rescan_btn.configure(state="normal", text="Rescan Songs")
+                self.rescan_btn.configure(state="normal", text="↺  Rescan Songs")
 
-            self.after(0, _done)
+            self._safe_after(_done)
 
         threading.Thread(target=_scan, daemon=True).start()
 
@@ -357,9 +366,9 @@ class MainWindow(ctk.CTk):
 
     def _on_song_selected(self, song: SongEntry):
         """Called when user clicks a song in the library."""
-        self.state.selected_song = song
-        self.state.selected_video = None
-        self.state.sync_result = None
+        self.app_state.selected_song = song
+        self.app_state.selected_video = None
+        self.app_state.sync_result = None
 
         self.search_panel.set_song(song)
         self.offset_panel.clear()
@@ -373,11 +382,11 @@ class MainWindow(ctk.CTk):
 
     def _on_video_selected(self, video: VideoResult):
         """Called when user picks a video result in the search panel."""
-        song = self.state.selected_song
+        song = self.app_state.selected_song
         if not song:
             return
 
-        self.state.selected_video = video
+        self.app_state.selected_video = video
         self._set_status(f"Downloading: {video.title}", 0.02)
 
         def _download():
@@ -385,20 +394,18 @@ class MainWindow(ctk.CTk):
                 path = download_video(
                     video_result=video,
                     dest_folder=song.folder,
-                    deno_path=self.state.deno_path,
+                    deno_path=self.app_state.deno_path,
                     progress_cb=self._set_progress,
                 )
             except RuntimeError as exc:
                 def _err():
                     messagebox.showerror("Download Failed", str(exc))
                     self._set_status(f"Download failed: {exc}", 0)
-                self.after(0, _err)
+                self._safe_after(_err)
                 return
 
-            # Update song entry
             song.has_video = True
             song.video_path = path
-
             self._set_status("Download complete!  Running audio sync...", 1.0)
             self._run_sync(song, path)
 
@@ -407,7 +414,7 @@ class MainWindow(ctk.CTk):
     def _run_sync(self, song: SongEntry, video_path: Path):
         """Run audio sync in background after download completes."""
         stem = song.best_audio_stem()
-        ffmpeg = self.state.ffmpeg_path
+        ffmpeg = self.app_state.ffmpeg_path
 
         if not stem or not ffmpeg:
             def _no_sync():
@@ -415,8 +422,8 @@ class MainWindow(ctk.CTk):
                     reason="No audio stem found" if not stem else "ffmpeg not available"
                 )
                 self.tab_view.set("Sync & Offset")
-                self.library_panel.refresh(self.state.songs)
-            self.after(0, _no_sync)
+                self.library_panel.refresh(self.app_state.songs)
+            self._safe_after(_no_sync)
             return
 
         def _sync():
@@ -426,14 +433,14 @@ class MainWindow(ctk.CTk):
                 ffmpeg_path=ffmpeg,
                 progress_cb=lambda msg: self._set_status(msg),
             )
-            self.state.sync_result = result
+            self.app_state.sync_result = result
 
             def _show():
                 self.offset_panel.show_result(song, result)
                 self.tab_view.set("Sync & Offset")
-                self.library_panel.refresh(self.state.songs)
+                self.library_panel.refresh(self.app_state.songs)
 
-            self.after(0, _show)
+            self._safe_after(_show)
 
         threading.Thread(target=_sync, daemon=True).start()
 
@@ -455,13 +462,13 @@ class MainWindow(ctk.CTk):
     # ------------------------------------------------------------------
 
     def _change_folder(self):
-        current = self.state.songs_folder
+        current = self.app_state.songs_folder
         chosen = filedialog.askdirectory(
             title="Select Clone Hero Songs Folder",
             initialdir=current if Path(current).exists() else "/",
         )
         if chosen:
-            self.state.config["songs_folder"] = chosen
-            save_config(self.state.config)
+            self.app_state.config["songs_folder"] = chosen
+            save_config(self.app_state.config)
             self._folder_lbl.configure(text=f"  {chosen}")
             self._refresh_library()

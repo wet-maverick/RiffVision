@@ -514,5 +514,7 @@ class FirstRunWizard(ctk.CTkToplevel):
         self.config["songs_folder"] = self.folder_var.get()
         self.config["setup_complete"] = True
         save_config(self.config)
-        self.destroy()
+        # Call on_complete BEFORE destroying so the callback can call root.quit()
+        # which exits the mainloop cleanly. The root is then destroyed by _run_wizard().
         self.on_complete(self.config)
+        self.destroy()

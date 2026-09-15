@@ -4,10 +4,15 @@ main.py
 RiffVision entry point.
 
 Responsibilities:
-  1. Check Python version (3.10+ required)
-  2. Load config from ~/.riffvision/config.json
-  3. Show the first-run wizard if setup is incomplete
-  4. Launch the main window
+  1. Set Windows DPI awareness before any Tk window is created
+  2. Check Python version (3.10+ required)
+  3. Run first-run wizard if needed (in its own mainloop)
+  4. Launch the main window (in its own fresh mainloop)
+
+Key design: wizard and main window run in SEPARATE mainloop calls.
+The wizard mainloop exits cleanly before the main window is created.
+This prevents stale after() callbacks from the wizard's root window
+from firing against the new window and crashing.
 """
 
 from __future__ import annotations
@@ -19,14 +24,11 @@ import os
 def _set_dpi_awareness():
     """
     Tell Windows to render at native DPI instead of letting it scale/blur.
-    This prevents the window from being positioned off-screen on high-DPI
-    displays and ensures geometry coordinates are in real pixels.
     Must be called before any Tk window is created.
     """
     if sys.platform == "win32":
         try:
             from ctypes import windll
-            # Per-monitor DPI aware (best for multi-monitor setups)
             windll.shcore.SetProcessDpiAwareness(2)
         except Exception:
             try:
@@ -50,7 +52,6 @@ def main():
     _set_dpi_awareness()
     _check_python_version()
 
-    # ── Imports after version check ────────────────────────────────────
     try:
         import customtkinter as ctk
     except ImportError:
@@ -61,54 +62,67 @@ def main():
         input("Press Enter to exit...")
         sys.exit(1)
 
-    from app.setup.first_run import (
-        load_config,
-        save_config,
-        needs_setup,
-        FirstRunWizard,
-        PALETTE,
-    )
-    from app.ui.main_window import MainWindow
+    from app.setup.first_run import load_config, needs_setup
 
-    # ── Configure CTk appearance ───────────────────────────────────────
     ctk.set_appearance_mode("dark")
     ctk.set_default_color_theme("blue")
 
-    # ── Load config ────────────────────────────────────────────────────
     config = load_config()
 
-    # ── Build root window (hidden initially) ──────────────────────────
-    # We need a root window for the wizard (CTkToplevel requires a parent).
-    root = ctk.CTk()
-    root.withdraw()   # hide until setup is done
-
+    # ── Phase 1: first-run wizard (own root + own mainloop) ───────────
     if needs_setup(config):
-        # ── First-run wizard ───────────────────────────────────────────
-        # We show the wizard as a modal Toplevel over a hidden root.
-        # When wizard calls on_complete, we launch the main window.
-
-        def _on_setup_complete(updated_config: dict):
-            root.destroy()
-            _launch_main(updated_config)
-
-        wizard = FirstRunWizard(root, config, on_complete=_on_setup_complete)
-
-        # If user closes the wizard without completing, exit gracefully
-        def _on_wizard_close():
-            root.destroy()
+        config = _run_wizard(config)
+        if config is None:
+            # User closed the wizard without completing
             sys.exit(0)
 
-        wizard.protocol("WM_DELETE_WINDOW", _on_wizard_close)
-        root.mainloop()
-
-    else:
-        # ── Skip setup, go straight to main window ─────────────────────
-        root.destroy()
-        _launch_main(config)
+    # ── Phase 2: main window (fresh root + fresh mainloop) ────────────
+    _run_main_window(config)
 
 
-def _launch_main(config: dict):
-    """Create and run the main application window."""
+def _run_wizard(config: dict):
+    """
+    Show the first-run wizard in its own CTk root + mainloop.
+    Returns the updated config dict on completion, or None if user closed it.
+
+    The wizard root is fully destroyed before this function returns,
+    so no stale after() callbacks can leak into the main window.
+    """
+    import customtkinter as ctk
+    from app.setup.first_run import FirstRunWizard, save_config
+
+    result_holder = {"config": None, "completed": False}
+
+    root = ctk.CTk()
+    root.withdraw()
+
+    def _on_complete(updated_config: dict):
+        result_holder["config"]    = updated_config
+        result_holder["completed"] = True
+        # Schedule quit AFTER this callback returns so CTk cleans up properly
+        root.after(10, root.quit)
+
+    wizard = FirstRunWizard(root, config, on_complete=_on_complete)
+
+    def _on_close():
+        result_holder["completed"] = False
+        root.quit()
+
+    wizard.protocol("WM_DELETE_WINDOW", _on_close)
+
+    root.mainloop()     # blocks until root.quit() is called above
+    root.destroy()      # fully destroy — kills all pending after() callbacks
+
+    if result_holder["completed"]:
+        return result_holder["config"]
+    return None
+
+
+def _run_main_window(config: dict):
+    """
+    Launch the main application window in a fresh mainloop.
+    Called only after any wizard root has been fully destroyed.
+    """
     import customtkinter as ctk
     from app.ui.main_window import MainWindow
 
@@ -116,7 +130,7 @@ def _launch_main(config: dict):
     ctk.set_default_color_theme("blue")
 
     app = MainWindow(config)
-    app.protocol("WM_DELETE_WINDOW", app.destroy)
+    # _on_close is already registered inside MainWindow.__init__
     app.mainloop()
 
 
