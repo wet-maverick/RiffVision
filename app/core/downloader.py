@@ -96,8 +96,8 @@ def _build_ydl_opts(
 ) -> dict:
     """
     Build yt-dlp options dict with EJS / Deno configuration.
-    The bgutil PO Token plugin registers itself automatically once installed —
-    we just need to make sure yt-dlp's options don't interfere.
+    yt-dlp >= 2024.x expects js_runtimes as a dict {runtime: {config}}
+    not a list. We set DENO_PATH env var so yt-dlp can locate the binary.
     """
     opts: dict = {
         "quiet": True,
@@ -105,14 +105,13 @@ def _build_ydl_opts(
         "noprogress": True,
     }
 
-    # Configure Deno as the JS runtime for EJS challenge solving
+    # Point yt-dlp at our bundled Deno binary via env var
     if deno_path:
-        # yt-dlp reads DENO_PATH env var or uses system PATH
         os.environ["DENO_PATH"] = deno_path
-        opts["js_runtimes"] = ["deno"]
-    else:
-        # Let yt-dlp try to find Deno on PATH
-        opts["js_runtimes"] = ["deno", "node", "quickjs"]
+
+    # js_runtimes must be a dict: {runtime_name: {options_dict}}
+    # Empty dict = use all defaults for that runtime
+    opts["js_runtimes"] = {"deno": {}}
 
     if extra:
         opts.update(extra)
