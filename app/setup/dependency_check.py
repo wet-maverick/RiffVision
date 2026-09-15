@@ -40,7 +40,7 @@ FFMPEG_DIR = APP_DATA_DIR / "ffmpeg"
 @dataclass
 class DepStatus:
     name: str
-    found: bool
+    found: bool = False   # default False so factory lambdas can omit it
     version: str = ""
     path: str = ""
     error: str = ""
