@@ -185,28 +185,28 @@ def search_youtube(
         if not info or "entries" not in info:
             return []
 
-            for entry in info.get("entries", []):
-                if not entry:
-                    continue
-                vid_id = entry.get("id", "")
-                if not vid_id:
-                    continue
-                thumb = (
-                    entry.get("thumbnail")
-                    or (entry.get("thumbnails", [{}])[-1].get("url", "")
-                        if entry.get("thumbnails") else "")
-                    or _thumbnail_url(vid_id)
-                )
-                results.append(VideoResult(
-                    video_id=vid_id,
-                    title=entry.get("title", "Unknown Title"),
-                    channel=entry.get("uploader") or entry.get("channel") or "Unknown",
-                    duration_sec=int(entry.get("duration") or 0),
-                    thumbnail_url=thumb,
-                    watch_url=f"https://www.youtube.com/watch?v={vid_id}",
-                    view_count=int(entry.get("view_count") or 0),
-                    description=entry.get("description") or "",
-                ))
+        for entry in info.get("entries", []):
+            if not entry:
+                continue
+            vid_id = entry.get("id", "")
+            if not vid_id:
+                continue
+            thumb = (
+                entry.get("thumbnail")
+                or (entry.get("thumbnails", [{}])[-1].get("url", "")
+                    if entry.get("thumbnails") else "")
+                or _thumbnail_url(vid_id)
+            )
+            results.append(VideoResult(
+                video_id=vid_id,
+                title=entry.get("title", "Unknown Title"),
+                channel=entry.get("uploader") or entry.get("channel") or "Unknown",
+                duration_sec=int(entry.get("duration") or 0),
+                thumbnail_url=thumb,
+                watch_url=f"https://www.youtube.com/watch?v={vid_id}",
+                view_count=int(entry.get("view_count") or 0),
+                description=entry.get("description") or "",
+            ))
         return results
 
     try:
