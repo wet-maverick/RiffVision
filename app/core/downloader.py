@@ -138,11 +138,15 @@ def _thumbnail_url(video_id: str) -> str:
 
 def _is_cookie_error(msg: str) -> bool:
     """Return True if the error is about missing/unreadable browser cookies."""
-    msg_l = msg.lower()
-    return any(k in msg_l for k in (
-        "could not find", "cookies database", "cookie", "sqlite",
-        "no such file", "unable to open", "keyring",
-    ))
+    m = msg.lower()
+    return ("cookie" in m and ("could not find" in m or "no such file" in m
+                               or "unable to open" in m or "database" in m))
+
+
+def _is_age_gate(msg: str) -> bool:
+    """Return True if the error is a YouTube age-verification rejection."""
+    m = msg.lower()
+    return "sign in to confirm your age" in m or "age-restricted" in m
 
 
 def search_youtube(
@@ -167,15 +171,16 @@ def search_youtube(
         }, cookie_browser=browser)
 
         results: list[VideoResult] = []
-        with YoutubeDL(opts) as ydl:
-            search_url = f"ytsearch{max_results}:{query}"
-            try:
+        # Catch Exception broadly — cookie errors fire during YoutubeDL.__init__
+        try:
+            with YoutubeDL(opts) as ydl:
+                search_url = f"ytsearch{max_results}:{query}"
                 info = ydl.extract_info(search_url, download=False)
-            except (DownloadError, ExtractorError) as exc:
-                raise RuntimeError(f"YouTube search failed: {exc}") from exc
+        except Exception as exc:
+            raise RuntimeError(f"YouTube search failed: {exc}") from exc
 
-            if not info or "entries" not in info:
-                return []
+        if not info or "entries" not in info:
+            return []
 
             for entry in info.get("entries", []):
                 if not entry:
@@ -350,19 +355,44 @@ def download_video(
         }, cookie_browser=browser)
         if ffmpeg_dir:
             _opts["ffmpeg_location"] = ffmpeg_dir
-        with YoutubeDL(_opts) as ydl:
-            ydl.download([video_result.watch_url])
+        # Catch Exception broadly — cookie errors fire during YoutubeDL.__init__
+        # before download() is even called, so they won't be DownloadError.
+        try:
+            with YoutubeDL(_opts) as ydl:
+                ydl.download([video_result.watch_url])
+        except Exception as e:
+            raise RuntimeError(str(e)) from e
 
     try:
         _do_download(cookie_browser)
-    except (DownloadError, ExtractorError) as exc:
+    except RuntimeError as exc:
         err_str = str(exc)
         if _is_cookie_error(err_str):
-            # Cookie DB missing — retry without cookies
+            # Browser profile not found — retry without cookies.
+            # If the video is age-gated, the retry will fail with a clear message.
             try:
                 _do_download("none")
-            except (DownloadError, ExtractorError) as exc2:
+            except RuntimeError as exc2:
+                err2 = str(exc2)
+                if _is_age_gate(err2):
+                    raise RuntimeError(
+                        "This video is age-restricted.\n\n"
+                        "To download it:\n"
+                        "1. Go to Settings → Browser for cookies\n"
+                        "2. Select the browser you use for YouTube\n"
+                        "3. Make sure you're logged into YouTube in that browser\n"
+                        "4. Try downloading again."
+                    ) from exc2
                 raise RuntimeError(f"Download failed: {exc2}") from exc2
+        elif _is_age_gate(err_str):
+            raise RuntimeError(
+                "This video is age-restricted.\n\n"
+                "To download it:\n"
+                "1. Go to Settings → Browser for cookies\n"
+                "2. Select the browser you use for YouTube\n"
+                "3. Make sure you're logged into YouTube in that browser\n"
+                "4. Try downloading again."
+            ) from exc
         else:
             raise RuntimeError(f"Download failed: {exc}") from exc
 
