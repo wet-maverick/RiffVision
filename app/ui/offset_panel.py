@@ -31,7 +31,7 @@ class OffsetPanel(ctk.CTkFrame):
     SLIDER_MIN_MS = -15000    # -15 seconds
     SLIDER_MAX_MS =  15000    # +15 seconds
 
-    def __init__(self, parent, state, status_cb: Callable[[str], None], **kwargs):
+    def __init__(self, parent, state, status_cb: Callable[[str, float], None], **kwargs):
         super().__init__(parent, fg_color="transparent", **kwargs)
         self.app_state = state
         self.status_cb = status_cb
@@ -430,10 +430,13 @@ class OffsetPanel(ctk.CTkFrame):
         self._update_offset_display(new_val)
 
     def _log(self, msg: str):
-        self.log_box.configure(state="normal")
-        self.log_box.insert("end", msg + "\n")
-        self.log_box.see("end")
-        self.log_box.configure(state="disabled")
+        """Append to log textbox — thread-safe via _safe_after."""
+        def _do():
+            self.log_box.configure(state="normal")
+            self.log_box.insert("end", msg + "\n")
+            self.log_box.see("end")
+            self.log_box.configure(state="disabled")
+        self._safe_after(_do)
 
     def _do_apply(self):
         if not self._song:

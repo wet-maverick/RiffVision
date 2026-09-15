@@ -298,12 +298,12 @@ class MainWindow(ctk.CTk):
         """Update status bar. progress=-1 keeps current bar value. Thread-safe."""
         def _do():
             self.status_label.configure(text=message)
-            if 0 <= progress <= 1:
-                self.progress_bar.set(progress)
-                self.progress_bar.configure(progress_color=PALETTE["accent_blue"])
-            elif progress == 1.0:
+            if progress == 1.0:                          # BUG1 fix: check 1.0 first
                 self.progress_bar.set(1.0)
                 self.progress_bar.configure(progress_color=PALETTE["success"])
+            elif 0 <= progress < 1.0:
+                self.progress_bar.set(progress)
+                self.progress_bar.configure(progress_color=PALETTE["accent_blue"])
         self._safe_after(_do)
 
     def _set_progress(self, dp: DownloadProgress):
@@ -340,10 +340,17 @@ class MainWindow(ctk.CTk):
         self.rescan_btn.configure(state="disabled", text="Scanning...")
 
         def _scan():
-            songs = scan_songs(self.app_state.songs_folder)
-            self.app_state.songs = songs
+            try:
+                songs = scan_songs(self.app_state.songs_folder)
+            except Exception as exc:
+                def _err():
+                    self.rescan_btn.configure(state="normal", text="↺  Rescan Songs")
+                    self._set_status(f"Scan error: {exc}", 0)
+                self._safe_after(_err)
+                return
 
             def _done():
+                self.app_state.songs = songs          # BUG4: write on main thread
                 self.library_panel.refresh(songs)
                 total = len(songs)
                 missing = sum(1 for s in songs if not s.has_video)
@@ -404,10 +411,12 @@ class MainWindow(ctk.CTk):
                 self._safe_after(_err)
                 return
 
-            song.has_video = True
-            song.video_path = path
-            self._set_status("Download complete!  Running audio sync...", 1.0)
-            self._run_sync(song, path)
+            def _after_download():                    # BUG4: write on main thread
+                song.has_video = True
+                song.video_path = path
+                self._set_status("Download complete!  Running audio sync...", 1.0)
+                self._run_sync(song, path)
+            self._safe_after(_after_download)
 
         threading.Thread(target=_download, daemon=True).start()
 
@@ -427,15 +436,19 @@ class MainWindow(ctk.CTk):
             return
 
         def _sync():
-            result = compute_offset(
-                video_path=video_path,
-                stem_path=stem,
-                ffmpeg_path=ffmpeg,
-                progress_cb=lambda msg: self._set_status(msg),
-            )
-            self.app_state.sync_result = result
+            try:
+                result = compute_offset(
+                    video_path=video_path,
+                    stem_path=stem,
+                    ffmpeg_path=ffmpeg,
+                    progress_cb=lambda msg: self._set_status(msg),
+                )
+            except Exception as exc:
+                from app.core.audio_sync import SyncResult as _SR
+                result = _SR(offset_ms=0, confidence=0.0, error=str(exc))
 
             def _show():
+                self.app_state.sync_result = result   # BUG4: write on main thread
                 self.offset_panel.show_result(song, result)
                 self.tab_view.set("Sync & Offset")
                 self.library_panel.refresh(self.app_state.songs)

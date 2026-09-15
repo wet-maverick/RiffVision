@@ -306,7 +306,10 @@ def install_ffmpeg(progress_cb: Optional[Callable[[str], None]] = None) -> DepSt
                 )
                 if ffmpeg_member:
                     ffmpeg_member.name = "ffmpeg"
-                    tf.extract(ffmpeg_member, FFMPEG_DIR)
+                    try:
+                        tf.extract(ffmpeg_member, FFMPEG_DIR, filter="data")
+                    except TypeError:
+                        tf.extract(ffmpeg_member, FFMPEG_DIR)  # Python < 3.12
             archive_path.unlink(missing_ok=True)
             ffmpeg_bin = FFMPEG_DIR / "ffmpeg"
             if ffmpeg_bin.exists():

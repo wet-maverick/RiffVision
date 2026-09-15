@@ -422,6 +422,14 @@ class FirstRunWizard(ctk.CTkToplevel):
         if chosen:
             self.folder_var.set(chosen)
 
+    def _safe_after(self, fn):
+        """Post fn() to the main thread only if this window still exists."""
+        try:
+            if self.winfo_exists():
+                self.after(0, fn)
+        except Exception:
+            pass
+
     def _log(self, msg: str):
         """Append a line to the log textbox (thread-safe)."""
         def _do():
@@ -429,7 +437,7 @@ class FirstRunWizard(ctk.CTkToplevel):
             self.log_text.insert("end", msg + "\n")
             self.log_text.see("end")
             self.log_text.configure(state="disabled")
-        self.after(0, _do)
+        self._safe_after(_do)
 
     def _set_dep_status(self, name: str, ok: bool, detail: str = ""):
         def _do():
@@ -443,14 +451,14 @@ class FirstRunWizard(ctk.CTkToplevel):
                 lbl.configure(text=f"○  {detail or 'optional'}", text_color=PALETTE["warning"])
             else:
                 lbl.configure(text=f"✗  Missing", text_color=PALETTE["danger"])
-        self.after(0, _do)
+        self._safe_after(_do)
 
     def _run_initial_check(self):
         def _check():
             result = check_all()
             self._update_dep_ui(result)
             if result.all_ok:
-                self.after(0, lambda: self.done_btn.configure(state="normal"))
+                self._safe_after(lambda: self.done_btn.configure(state="normal"))
         threading.Thread(target=_check, daemon=True).start()
 
     def _update_dep_ui(self, result: CheckResult):
@@ -506,7 +514,7 @@ class FirstRunWizard(ctk.CTkToplevel):
                 if final.all_ok:
                     self.done_btn.configure(state="normal")
 
-            self.after(0, _ui_update)
+            self._safe_after(_ui_update)
 
         threading.Thread(target=_install_worker, daemon=True).start()
 
