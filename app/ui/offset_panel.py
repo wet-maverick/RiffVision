@@ -349,6 +349,40 @@ class OffsetPanel(ctk.CTkFrame):
         self._sync_result = None
         self._show_idle()
 
+    def prime_existing(self, song: SongEntry):
+        """
+        Called when a song with an existing video is selected.
+        Reads the current video_start_time from song.ini and enables
+        the panel so the user can re-sync or manually adjust immediately.
+        """
+        from app.core.ini_writer import read_video_start_time
+        self._song = song
+        self._sync_result = None
+
+        current_offset = read_video_start_time(song.folder / "song.ini")
+
+        self.song_name_lbl.configure(text=song.display_name)
+        self.detected_lbl.configure(
+            text=f"Existing offset: {current_offset:+d} ms",
+            text_color=PALETTE["accent_cyan"],
+        )
+        self.confidence_lbl.configure(
+            text="Hit Re-run Sync to detect automatically, or adjust manually below.",
+            text_color=PALETTE["text_secondary"],
+        )
+        self.conf_bar.set(0)
+
+        # Set slider to current saved value
+        clamped = max(self.SLIDER_MIN_MS, min(self.SLIDER_MAX_MS, current_offset))
+        self.slider_var.set(clamped)
+        self._update_offset_display(clamped)
+
+        self.apply_btn.configure(state="normal")
+        self.resync_btn.configure(state="normal", text="Re-run Sync")
+        self.slider.configure(state="normal")
+        self._log(f"Loaded existing offset: {current_offset:+d} ms  "
+                  f"from {song.display_name}")
+
     def show_no_sync(self, reason: str = ""):
         """Show state when sync cannot run (missing ffmpeg or stems)."""
         self._log(f"Audio sync unavailable: {reason}")

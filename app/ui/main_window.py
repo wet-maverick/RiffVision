@@ -401,12 +401,21 @@ class MainWindow(ctk.CTk):
         self.app_state.sync_result = None
 
         self.search_panel.set_song(song)
-        self.offset_panel.clear()
-        self.tab_view.set("Search YouTube")
+
+        if song.has_video:
+            # Song already has a video — prime the offset panel so the
+            # user can immediately re-sync or manually adjust without
+            # needing to go through a download first.
+            self.offset_panel.prime_existing(song)
+            self.tab_view.set("Sync & Offset")
+        else:
+            self.offset_panel.clear()
+            self.tab_view.set("Search YouTube")
 
         self._set_status(
             f"Selected: {song.display_name}  •  "
-            + ("Video present" if song.has_video else "No video — search below"),
+            + ("Video present — Sync & Offset ready" if song.has_video
+               else "No video — search below"),
             progress=0,
         )
 
