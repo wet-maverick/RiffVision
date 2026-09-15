@@ -36,6 +36,8 @@ from app.core.ini_writer import write_video_start_time
 from app.ui.library_panel import LibraryPanel
 from app.ui.search_panel import SearchPanel
 from app.ui.offset_panel import OffsetPanel
+from app.ui.batch_panel import BatchPanel
+from app.ui.settings_panel import SettingsPanel
 from app.ui.banner import BannerCanvas, BANNER_H
 
 
@@ -94,12 +96,15 @@ class MainWindow(ctk.CTk):
         self._build_statusbar()
 
         # ── Wire up cross-panel callbacks ──────────────────────────────────
-        self.library_panel.on_song_selected = self._on_song_selected
-        self.search_panel.on_video_selected = self._on_video_selected
-        self.offset_panel.on_apply = self._on_apply_offset
+        self.library_panel.on_song_selected    = self._on_song_selected
+        self.library_panel.on_resync_requested = self._on_resync_requested
+        self.search_panel.on_video_selected    = self._on_video_selected
+        self.offset_panel.on_apply             = self._on_apply_offset
 
-        # ── Initial scan ───────────────────────────────────────────────────
+        # ── Initial scan + yt-dlp auto-update ─────────────────────────────
         self.after(100, self._refresh_library)
+        if self.app_state.config.get("auto_update_ytdlp", True):
+            self.after(500, self._auto_update_ytdlp)
         self.protocol("WM_DELETE_WINDOW", self._on_close)
 
     def _on_close(self):
@@ -219,6 +224,8 @@ class MainWindow(ctk.CTk):
 
         self.tab_view.add("Search YouTube")
         self.tab_view.add("Sync & Offset")
+        self.tab_view.add("Batch Download")
+        self.tab_view.add("Settings")
 
         self.search_panel = SearchPanel(
             self.tab_view.tab("Search YouTube"),
@@ -233,6 +240,21 @@ class MainWindow(ctk.CTk):
             status_cb=self._set_status,
         )
         self.offset_panel.pack(fill="both", expand=True)
+
+        self.batch_panel = BatchPanel(
+            self.tab_view.tab("Batch Download"),
+            self.app_state,
+            status_cb=self._set_status,
+        )
+        self.batch_panel.pack(fill="both", expand=True)
+
+        self.settings_panel = SettingsPanel(
+            self.tab_view.tab("Settings"),
+            self.app_state,
+            status_cb=self._set_status,
+            on_folder_change=self._on_folder_changed,
+        )
+        self.settings_panel.pack(fill="both", expand=True)
 
     def _build_statusbar(self):
         P = PALETTE
@@ -352,6 +374,7 @@ class MainWindow(ctk.CTk):
             def _done():
                 self.app_state.songs = songs          # BUG4: write on main thread
                 self.library_panel.refresh(songs)
+                self.batch_panel.refresh_songs(songs)
                 total = len(songs)
                 missing = sum(1 for s in songs if not s.has_video)
                 self.song_count_label.configure(
@@ -470,9 +493,28 @@ class MainWindow(ctk.CTk):
         except OSError as exc:
             messagebox.showerror("Write Error", str(exc))
 
+    def _on_resync_requested(self, song: SongEntry):
+        """Called from library right-click → Re-sync video."""
+        if not song.video_path or not song.video_path.exists():
+            messagebox.showwarning(
+                "No Video",
+                f"{song.display_name} has no video.mp4 to sync against."
+            )
+            return
+        self.tab_view.set("Sync & Offset")
+        self.offset_panel.clear()
+        self._set_status(f"Re-syncing: {song.display_name}...", 0.05)
+        self._run_sync(song, song.video_path)
+
     # ------------------------------------------------------------------
-    # Settings
+    # Settings / folder change
     # ------------------------------------------------------------------
+
+    def _on_folder_changed(self, new_path: str):
+        """Called by SettingsPanel when songs folder is changed."""
+        self.app_state.config["songs_folder"] = new_path
+        self._folder_lbl.configure(text=f"  {new_path}")
+        self._refresh_library()
 
     def _change_folder(self):
         current = self.app_state.songs_folder
@@ -485,3 +527,20 @@ class MainWindow(ctk.CTk):
             save_config(self.app_state.config)
             self._folder_lbl.configure(text=f"  {chosen}")
             self._refresh_library()
+
+    # ------------------------------------------------------------------
+    # yt-dlp auto-update
+    # ------------------------------------------------------------------
+
+    def _auto_update_ytdlp(self):
+        """Run yt-dlp update silently in the background on launch."""
+        from app.setup.dependency_check import update_ytdlp
+
+        def _worker():
+            changed, version = update_ytdlp()
+            if changed:
+                self._safe_after(lambda: self._set_status(
+                    f"yt-dlp updated to {version}", 0
+                ))
+
+        threading.Thread(target=_worker, daemon=True).start()

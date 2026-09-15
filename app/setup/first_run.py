@@ -33,11 +33,15 @@ CONFIG_PATH = APP_DATA_DIR / "config.json"
 DEFAULT_SONGS_PATH = "D:/CloneHeroSongs"
 
 _DEFAULTS = {
-    "songs_folder": DEFAULT_SONGS_PATH,
-    "theme": "dark",
-    "last_search_query": "",
-    "show_missing_only": False,
-    "setup_complete": False,
+    "songs_folder":       DEFAULT_SONGS_PATH,
+    "theme":              "dark",
+    "last_search_query":  "",
+    "show_missing_only":  False,
+    "setup_complete":     False,
+    "auto_sync":          True,
+    "max_results":        8,
+    "query_template":     "{artist} {title} official music video",
+    "auto_update_ytdlp":  True,
 }
 
 

@@ -231,13 +231,25 @@ class SearchPanel(ctk.CTkFrame):
     def set_song(self, song: SongEntry):
         """Called by main window when user selects a song."""
         self._current_song = song
-        self.query_var.set(song.search_query)
+
+        # Respect query_template from config if available
+        template = self.app_state.config.get(
+            "query_template", "{artist} {title} official music video"
+        )
+        try:
+            query = template.format(
+                artist=song.artist or "",
+                title=song.title or song.folder.name,
+            ).strip()
+        except (KeyError, IndexError):
+            query = song.search_query
+        self.query_var.set(query)
+
         has = "Video present" if song.has_video else "No video"
         self.context_lbl.configure(
             text=f"{song.display_name}  |  {has}  |  Click Search or edit the query above",
             text_color=PALETTE["text_secondary"],
         )
-        # Auto-search when a song is selected
         self._do_search()
 
     # ------------------------------------------------------------------
@@ -253,11 +265,12 @@ class SearchPanel(ctk.CTkFrame):
         self.search_btn.configure(state="disabled", text="Searching...")
         self.status_cb("Searching YouTube...", 0.05)
 
-        deno_path = get_deno_path()
+        deno_path   = get_deno_path()
+        max_results = int(self.app_state.config.get("max_results", 8))
 
         def _worker():
             try:
-                results = search_youtube(query, max_results=8, deno_path=deno_path)
+                results = search_youtube(query, max_results=max_results, deno_path=deno_path)
             except RuntimeError as exc:
                 def _err():
                     self._show_empty(f"Search failed: {exc}")

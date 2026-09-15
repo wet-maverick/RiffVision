@@ -340,3 +340,46 @@ def install_pot_plugin(progress_cb: Optional[Callable[[str], None]] = None) -> D
     else:
         emit(f"PO Token plugin install failed: {out}")
         return DepStatus("PO Token Plugin", False, error=out)
+
+
+# ---------------------------------------------------------------------------
+# yt-dlp auto-updater
+# ---------------------------------------------------------------------------
+
+def get_ytdlp_version() -> str:
+    """Return the currently installed yt-dlp version string, or '' on error."""
+    try:
+        import yt_dlp
+        return getattr(yt_dlp, "__version__", "")
+    except ImportError:
+        return ""
+
+
+def update_ytdlp(progress_cb: Optional[Callable[[str], None]] = None) -> tuple[bool, str]:
+    """
+    Upgrade yt-dlp to the latest version via pip.
+    Returns (changed: bool, version: str).
+    changed=True means a newer version was installed.
+    """
+    def emit(msg: str):
+        if progress_cb:
+            progress_cb(msg)
+
+    before = get_ytdlp_version()
+    emit(f"Checking yt-dlp (current: {before or 'unknown'}) ...")
+
+    ok, out = _run(
+        [sys.executable, "-m", "pip", "install", "-q", "-U", "yt-dlp[default]"],
+        timeout=120,
+    )
+    if not ok:
+        emit(f"yt-dlp update failed: {out[:120]}")
+        return False, before
+
+    after = get_ytdlp_version()
+    if after and after != before:
+        emit(f"yt-dlp updated  {before} → {after}")
+        return True, after
+    else:
+        emit(f"yt-dlp already up to date ({after})")
+        return False, after

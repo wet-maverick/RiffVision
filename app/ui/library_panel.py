@@ -37,6 +37,7 @@ class LibraryPanel(ctk.CTkFrame):
         self.pack_propagate(False)
         self.app_state = state
         self.on_song_selected: Optional[Callable[[SongEntry], None]] = None
+        self.on_resync_requested: Optional[Callable[[SongEntry], None]] = None
 
         self._all_songs: list[SongEntry] = []
         self._filtered_songs: list[SongEntry] = []
@@ -163,6 +164,8 @@ class LibraryPanel(ctk.CTkFrame):
 
         # Selection
         self._listbox.bind("<<ListboxSelect>>", self._on_listbox_select)
+        # Right-click context menu
+        self._listbox.bind("<Button-3>", self._on_right_click)
 
     # ------------------------------------------------------------------
     # Data
@@ -238,3 +241,43 @@ class LibraryPanel(ctk.CTkFrame):
         song = self._filtered_songs[idx]
         if self.on_song_selected:
             self.on_song_selected(song)
+
+    # ------------------------------------------------------------------
+    # Right-click context menu
+    # ------------------------------------------------------------------
+
+    def _on_right_click(self, event):
+        import tkinter as tk
+        # Select the row under the cursor
+        idx = self._listbox.nearest(event.y)
+        if idx < 0 or idx >= len(self._filtered_songs):
+            return
+        self._listbox.selection_clear(0, "end")
+        self._listbox.selection_set(idx)
+        self._selected_index = idx
+        song = self._filtered_songs[idx]
+
+        menu = tk.Menu(
+            self, tearoff=0,
+            bg=PALETTE["bg_card"],
+            fg=PALETTE["text_primary"],
+            activebackground=PALETTE["accent_blue"],
+            activeforeground="#000000",
+            font=("Segoe UI", 10),
+        )
+        menu.add_command(
+            label=f"Search YouTube for this song",
+            command=lambda: self.on_song_selected and self.on_song_selected(song),
+        )
+
+        if song.has_video:
+            menu.add_separator()
+            menu.add_command(
+                label="Re-sync video offset",
+                command=lambda: self.on_resync_requested and self.on_resync_requested(song),
+            )
+
+        try:
+            menu.tk_popup(event.x_root, event.y_root)
+        finally:
+            menu.grab_release()
