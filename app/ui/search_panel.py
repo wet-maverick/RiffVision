@@ -95,14 +95,28 @@ class VideoCard(ctk.CTkFrame):
             anchor="e",
         ).pack(side="right")
 
-        # View count
+        # View count + codec badge row
+        bottom_row = ctk.CTkFrame(self, fg_color="transparent")
+        bottom_row.pack(fill="x", padx=8, pady=(0, 6))
+
         ctk.CTkLabel(
-            self,
+            bottom_row,
             text=self.video.view_count_fmt,
             font=ctk.CTkFont(family="Segoe UI", size=10),
             text_color=P["text_dim"],
             anchor="w",
-        ).pack(padx=8, pady=(0, 6), fill="x")
+        ).pack(side="left", fill="x", expand=True)
+
+        # H.264 compatibility badge — download always forces avc1
+        ctk.CTkLabel(
+            bottom_row,
+            text="H.264 ✓",
+            font=ctk.CTkFont(family="Segoe UI", size=9, weight="bold"),
+            text_color="#000000",
+            fg_color=P["success"],
+            corner_radius=4,
+            padx=4,
+        ).pack(side="right")
 
         # Select button
         ctk.CTkButton(
