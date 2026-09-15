@@ -114,14 +114,78 @@ def _parse_ini(ini_path: Path) -> dict:
     return data
 
 
+# Video filenames Clone Hero recognises (checked case-insensitively)
+_VIDEO_NAMES = {"video.mp4", "video.webm", "video.avi", "video.mkv",
+                "video.ogv", "video.mov"}
+
+
+def _find_video(folder: Path) -> Optional[Path]:
+    """
+    Find a background video for a song folder.
+
+    Search order:
+      1. Exact match for known names in the song folder itself
+      2. One level UP from the song folder (video.mp4 next to the
+         difficulty folder, e.g. Artist-Song/video.mp4 when chart is
+         in Artist-Song/Hard/song.ini)
+      3. One level DOWN into subfolders of the song folder
+      4. Any .mp4/.webm in the song folder with a non-audio stem name
+         (catches non-standard names like bg.mp4, background.mp4, etc.)
+
+    Returns the Path to the first match, or None.
+    """
+    _VIDEO_EXTS = {".mp4", ".webm", ".avi", ".mkv", ".ogv", ".mov"}
+
+    def _check_dir(d: Path) -> Optional[Path]:
+        """Return first video file found directly in directory d."""
+        try:
+            for p in d.iterdir():
+                if p.is_file() and p.name.lower() in _VIDEO_NAMES:
+                    return p
+        except PermissionError:
+            pass
+        return None
+
+    # 1. Song folder itself — exact name match
+    hit = _check_dir(folder)
+    if hit:
+        return hit
+
+    # 2. Parent folder — video may sit one level up from a difficulty subfolder
+    parent = folder.parent
+    if parent != folder:
+        hit = _check_dir(parent)
+        if hit:
+            return hit
+
+    # 3. One level down — video in a subfolder of the song dir
+    try:
+        for child in folder.iterdir():
+            if child.is_dir():
+                hit = _check_dir(child)
+                if hit:
+                    return hit
+    except PermissionError:
+        pass
+
+    # 4. Any video-extension file in the song folder (non-standard name)
+    try:
+        for p in folder.iterdir():
+            if (p.is_file()
+                    and p.suffix.lower() in _VIDEO_EXTS
+                    and p.stem.lower() not in _AUDIO_STEM_NAMES):
+                return p
+    except PermissionError:
+        pass
+
+    return None
+
+
 def _safe_int(value: str, default: int = 0) -> int:
     try:
         return int(float(value))
     except (ValueError, TypeError):
         return default
-
-
-def _build_entry(folder: Path) -> Optional[SongEntry]:
     """
     Build a SongEntry from a directory.
     Returns None if the directory doesn't look like a valid song folder
@@ -135,11 +199,10 @@ def _build_entry(folder: Path) -> Optional[SongEntry]:
 
     entry = SongEntry(folder=folder, ini_path=ini_path if ini_path.exists() else None)
 
-    # Check for video
-    video_path = folder / "video.mp4"
-    entry.has_video = video_path.exists()
-    if entry.has_video:
-        entry.video_path = video_path
+    # Check for video — search folder and one level of subfolders
+    video_path = _find_video(folder)
+    entry.has_video = video_path is not None
+    entry.video_path = video_path
 
     # Collect audio stems
     entry.audio_stems = [
