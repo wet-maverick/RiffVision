@@ -179,7 +179,7 @@ class OffsetPanel(ctk.CTkFrame):
 
         ctk.CTkLabel(
             adj_inner,
-            text="Negative = video starts before song  •  Positive = video starts after song",
+            text="Positive = skip into video (video leads)  •  Negative = delay video (audio leads)",
             font=ctk.CTkFont(family="Segoe UI", size=10),
             text_color=P["text_dim"],
             anchor="w",

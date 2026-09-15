@@ -56,9 +56,10 @@ class SyncResult:
 
     @property
     def offset_display(self) -> str:
-        s = self.offset_ms / 1000
+        s    = self.offset_ms / 1000
         sign = "+" if s >= 0 else ""
-        return f"{sign}{s:.3f}s ({self.offset_ms:+d} ms)"
+        hint = "video leads" if self.offset_ms > 0 else ("audio leads" if self.offset_ms < 0 else "in sync")
+        return f"{sign}{s:.3f}s  ({self.offset_ms:+d} ms — {hint})"
 
 
 # ---------------------------------------------------------------------------
@@ -202,13 +203,28 @@ def compute_offset(
     peak_lag_samples = int(lags[peak_idx])
     confidence = float(np.abs(corr[peak_idx]))
 
-    # Convert lag to milliseconds
-    # Positive lag means video audio comes AFTER song audio starts
-    # → video needs to start BEFORE song → negative video_start_time
-    # We negate to match Clone Hero's video_start_time convention:
-    #   video_start_time = -(lag_ms)
-    lag_ms = int((peak_lag_samples / _SYNC_SR) * 1000)
-    offset_ms = -lag_ms
+    # Convert lag to milliseconds.
+    #
+    # Clone Hero's video_start_time convention (confirmed from wiki):
+    #   POSITIVE value → seek the video forward N ms before playback
+    #                     (skips the first N ms of the video file)
+    #                     Use when the video's musical content starts
+    #                     N ms into the video file.
+    #   NEGATIVE value → delay the video by N ms
+    #                     (audio starts first, video begins N ms later)
+    #
+    # What the cross-correlation tells us:
+    #   peak_lag_samples > 0  →  video audio LEADS song audio
+    #                            → the music hit in the video is
+    #                              peak_lag_ms into the video file
+    #                            → write video_start_time = +peak_lag_ms
+    #   peak_lag_samples < 0  →  video audio LAGS song audio
+    #                            → video needs to be delayed
+    #                            → write video_start_time = peak_lag_ms (negative)
+    #
+    # Therefore: offset_ms = lag_ms  (no negation needed)
+    lag_ms    = int((peak_lag_samples / _SYNC_SR) * 1000)
+    offset_ms = lag_ms   # sign preserved — matches Clone Hero convention
 
     emit(f"Sync complete. Offset: {offset_ms:+d} ms  (confidence: {confidence:.2f})")
 
