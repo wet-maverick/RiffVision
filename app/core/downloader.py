@@ -136,6 +136,15 @@ def _thumbnail_url(video_id: str) -> str:
 # Search
 # ---------------------------------------------------------------------------
 
+def _is_cookie_error(msg: str) -> bool:
+    """Return True if the error is about missing/unreadable browser cookies."""
+    msg_l = msg.lower()
+    return any(k in msg_l for k in (
+        "could not find", "cookies database", "cookie", "sqlite",
+        "no such file", "unable to open", "keyring",
+    ))
+
+
 def search_youtube(
     query: str,
     max_results: int = 8,
@@ -146,49 +155,62 @@ def search_youtube(
     Search YouTube using yt-dlp's ytsearch: prefix.
     Returns up to max_results VideoResult objects.
     Raises RuntimeError on failure.
+
+    If cookie extraction fails (browser not installed / profile missing),
+    retries automatically without cookies — most videos don't need them.
+    Age-gated videos will fail on the retry and surface a clear error.
     """
-    opts = _build_ydl_opts(deno_path, {
-        "extract_flat": True,
-        "skip_download": True,
-    }, cookie_browser=cookie_browser)
+    def _do_search(browser: str) -> list[VideoResult]:
+        opts = _build_ydl_opts(deno_path, {
+            "extract_flat": True,
+            "skip_download": True,
+        }, cookie_browser=browser)
 
-    results: list[VideoResult] = []
+        results: list[VideoResult] = []
+        with YoutubeDL(opts) as ydl:
+            search_url = f"ytsearch{max_results}:{query}"
+            try:
+                info = ydl.extract_info(search_url, download=False)
+            except (DownloadError, ExtractorError) as exc:
+                raise RuntimeError(f"YouTube search failed: {exc}") from exc
 
-    with YoutubeDL(opts) as ydl:
-        search_url = f"ytsearch{max_results}:{query}"
-        try:
-            info = ydl.extract_info(search_url, download=False)
-        except (DownloadError, ExtractorError) as exc:
-            raise RuntimeError(f"YouTube search failed: {exc}") from exc
+            if not info or "entries" not in info:
+                return []
 
-        if not info or "entries" not in info:
-            return []
+            for entry in info.get("entries", []):
+                if not entry:
+                    continue
+                vid_id = entry.get("id", "")
+                if not vid_id:
+                    continue
+                thumb = (
+                    entry.get("thumbnail")
+                    or (entry.get("thumbnails", [{}])[-1].get("url", "")
+                        if entry.get("thumbnails") else "")
+                    or _thumbnail_url(vid_id)
+                )
+                results.append(VideoResult(
+                    video_id=vid_id,
+                    title=entry.get("title", "Unknown Title"),
+                    channel=entry.get("uploader") or entry.get("channel") or "Unknown",
+                    duration_sec=int(entry.get("duration") or 0),
+                    thumbnail_url=thumb,
+                    watch_url=f"https://www.youtube.com/watch?v={vid_id}",
+                    view_count=int(entry.get("view_count") or 0),
+                    description=entry.get("description") or "",
+                ))
+        return results
 
-        for entry in info.get("entries", []):
-            if not entry:
-                continue
-            vid_id = entry.get("id", "")
-            if not vid_id:
-                continue
-
-            thumb = (
-                entry.get("thumbnail")
-                or (entry.get("thumbnails", [{}])[-1].get("url", "") if entry.get("thumbnails") else "")
-                or _thumbnail_url(vid_id)
-            )
-
-            results.append(VideoResult(
-                video_id=vid_id,
-                title=entry.get("title", "Unknown Title"),
-                channel=entry.get("uploader") or entry.get("channel") or "Unknown",
-                duration_sec=int(entry.get("duration") or 0),
-                thumbnail_url=thumb,
-                watch_url=f"https://www.youtube.com/watch?v={vid_id}",
-                view_count=int(entry.get("view_count") or 0),
-                description=entry.get("description") or "",
-            ))
-
-    return results
+    try:
+        return _do_search(cookie_browser)
+    except RuntimeError as exc:
+        # If the failure is a cookie/browser error, retry without cookies.
+        # This keeps search working even when Chrome isn't installed or the
+        # profile path doesn't exist. Age-gated videos will still fail on
+        # the retry — that error will surface normally to the user.
+        if _is_cookie_error(str(exc)):
+            return _do_search("none")
+        raise
 
 
 # ---------------------------------------------------------------------------
@@ -305,50 +327,44 @@ def download_video(
     # Find ffmpeg — yt-dlp needs it for merging streams
     from app.setup.dependency_check import get_ffmpeg_path
     ffmpeg_loc = get_ffmpeg_path()
-    if ffmpeg_loc:
-        ffmpeg_dir = str(Path(ffmpeg_loc).parent)
-    else:
-        ffmpeg_dir = None
+    ffmpeg_dir = str(Path(ffmpeg_loc).parent) if ffmpeg_loc else None
 
-    opts = _build_ydl_opts(deno_path, {
-        # Force H.264 (avc1) video codec — Clone Hero's video renderer
-        # cannot play AV1 or VP9, which yt-dlp picks by default as
-        # "best quality". We explicitly exclude them at every fallback level.
-        #
-        # Format string priority (yt-dlp picks the first match):
-        #   1. Best H.264 mp4 video + best m4a audio ≤1080p  (ideal)
-        #   2. Best H.264 video (any container) + best audio ≤1080p
-        #   3. Best pre-muxed mp4 ≤1080p that is H.264
-        #   4. Any H.264 stream ≤1080p as last resort
-        #
-        # vcodec^=avc  means "video codec starts with 'avc'" which matches
-        # avc1, avc1.42001e etc. — all H.264 variants on YouTube.
-        "format": (
-            "bestvideo[vcodec^=avc][height<=1080][ext=mp4]+bestaudio[ext=m4a]"
-            "/bestvideo[vcodec^=avc][height<=1080]+bestaudio"
-            "/best[vcodec^=avc][height<=1080][ext=mp4]"
-            "/best[vcodec^=avc][height<=1080]"
-        ),
-        "outtmpl": str(dest_folder / "video.%(ext)s"),
-        "merge_output_format": "mp4",
-        "progress_hooks": [_progress_hook],
-        "noprogress": False,
-        "quiet": True,
-        "no_warnings": True,
-        "postprocessors": [{
-            "key": "FFmpegVideoConvertor",
-            "preferedformat": "mp4",
-        }],
-    }, cookie_browser=cookie_browser)
-
-    if ffmpeg_dir:
-        opts["ffmpeg_location"] = ffmpeg_dir
+    def _do_download(browser: str):
+        _opts = _build_ydl_opts(deno_path, {
+            "format": (
+                "bestvideo[vcodec^=avc][height<=1080][ext=mp4]+bestaudio[ext=m4a]"
+                "/bestvideo[vcodec^=avc][height<=1080]+bestaudio"
+                "/best[vcodec^=avc][height<=1080][ext=mp4]"
+                "/best[vcodec^=avc][height<=1080]"
+            ),
+            "outtmpl": str(dest_folder / "video.%(ext)s"),
+            "merge_output_format": "mp4",
+            "progress_hooks": [_progress_hook],
+            "noprogress": False,
+            "quiet": True,
+            "no_warnings": True,
+            "postprocessors": [{
+                "key": "FFmpegVideoConvertor",
+                "preferedformat": "mp4",
+            }],
+        }, cookie_browser=browser)
+        if ffmpeg_dir:
+            _opts["ffmpeg_location"] = ffmpeg_dir
+        with YoutubeDL(_opts) as ydl:
+            ydl.download([video_result.watch_url])
 
     try:
-        with YoutubeDL(opts) as ydl:
-            ydl.download([video_result.watch_url])
+        _do_download(cookie_browser)
     except (DownloadError, ExtractorError) as exc:
-        raise RuntimeError(f"Download failed: {exc}") from exc
+        err_str = str(exc)
+        if _is_cookie_error(err_str):
+            # Cookie DB missing — retry without cookies
+            try:
+                _do_download("none")
+            except (DownloadError, ExtractorError) as exc2:
+                raise RuntimeError(f"Download failed: {exc2}") from exc2
+        else:
+            raise RuntimeError(f"Download failed: {exc}") from exc
 
     # Ensure the output file is named exactly video.mp4
     # yt-dlp may produce video.webm or video.mkv if conversion failed

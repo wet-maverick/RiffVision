@@ -289,10 +289,11 @@ class SearchPanel(ctk.CTkFrame):
                                          deno_path=deno_path,
                                          cookie_browser=cookie_browser)
             except RuntimeError as exc:
-                def _err():
-                    self._show_empty(f"Search failed: {exc}")
+                err_msg = str(exc)   # capture before exc goes out of scope
+                def _err(msg=err_msg):
+                    self._show_empty(f"Search failed: {msg}")
                     self.search_btn.configure(state="normal", text="Search")
-                    self.status_cb(f"Search failed: {exc}", 0)
+                    self.status_cb(f"Search failed: {msg}", 0)
                 self._safe_after(_err)
                 return
 
