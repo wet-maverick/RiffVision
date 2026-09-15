@@ -1,0 +1,31 @@
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+*.so
+*.egg
+*.egg-info/
+dist/
+build/
+.eggs/
+venv/
+.venv/
+env/
+.env/
+
+# RiffVision user data (stored in ~/.riffvision, not in repo)
+*.json
+!package.json
+
+# IDE
+.vscode/
+.idea/
+*.code-workspace
+.DS_Store
+Thumbs.db
+
+# PyInstaller
+*.spec
+dist/
+build/

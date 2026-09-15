@@ -1,0 +1,19 @@
+# RiffVision - Clone Hero Background Video Downloader
+# Core GUI
+customtkinter>=5.2.2
+Pillow>=10.0.0
+
+# YouTube downloading & search
+yt-dlp[default]>=2024.1.1
+
+# Audio sync / cross-correlation
+librosa>=0.10.1
+numpy>=1.24.0
+scipy>=1.11.0
+soundfile>=0.12.1
+
+# HTTP requests (thumbnail fetching)
+requests>=2.31.0
+
+# ffmpeg-python wrapper (audio extraction)
+ffmpeg-python>=0.2.0
