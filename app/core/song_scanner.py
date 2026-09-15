@@ -186,6 +186,9 @@ def _safe_int(value: str, default: int = 0) -> int:
         return int(float(value))
     except (ValueError, TypeError):
         return default
+
+
+def _build_entry(folder: Path) -> Optional[SongEntry]:
     """
     Build a SongEntry from a directory.
     Returns None if the directory doesn't look like a valid song folder
