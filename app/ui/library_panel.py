@@ -24,11 +24,18 @@ from app.core.song_scanner import SongEntry
 ROW_H      = 60    # px height of each row
 POOL_EXTRA = 4     # extra rows above/below visible area to pre-render
 
+# Plain tk colors for the row shell (tk.Frame uses bg=, not fg_color=)
+_COL_ROW_NORMAL   = PALETTE["bg_card"]       # "#151e33"
+_COL_ROW_HOVER    = PALETTE["bg_card_hover"] # "#1a2540"
+_COL_ROW_SELECTED = "#0d2245"
 
-class _SongRow(ctk.CTkFrame):
+
+class _SongRow(tk.Frame):
     """
-    A single reusable row widget. Call bind_song() to point it at a new
-    SongEntry without destroying/recreating any widgets.
+    A single reusable row widget. Extends plain tk.Frame so that
+    .place(width=, height=) works without CustomTkinter's restriction.
+    Inner content widgets are still CTk for styling.
+    Call bind_song() to rebind to a different SongEntry.
     """
 
     def __init__(self, parent, on_click: Callable[[int], None],
@@ -36,12 +43,9 @@ class _SongRow(ctk.CTkFrame):
                  on_leave: Callable[[int], None]):
         super().__init__(
             parent,
-            fg_color=PALETTE["bg_card"],
-            corner_radius=8,
-            height=ROW_H,
+            bg=_COL_ROW_NORMAL,
             cursor="hand2",
         )
-        self.pack_propagate(False)
         self._on_click = on_click
         self._on_enter = on_enter
         self._on_leave = on_leave
@@ -49,7 +53,7 @@ class _SongRow(ctk.CTkFrame):
 
         P = PALETTE
 
-        # Accent bar
+        # Accent bar — CTkFrame inside plain tk.Frame is fine
         self._accent = ctk.CTkFrame(self, fg_color=P["success"], width=4, corner_radius=2)
         self._accent.pack(side="left", fill="y", padx=(2, 0), pady=6)
 
@@ -58,8 +62,7 @@ class _SongRow(ctk.CTkFrame):
         text_frame.pack(side="left", fill="both", expand=True, padx=(8, 4))
 
         self._artist_lbl = ctk.CTkLabel(
-            text_frame,
-            text="",
+            text_frame, text="",
             font=ctk.CTkFont(family="Segoe UI", size=10),
             text_color=P["text_secondary"],
             anchor="w",
@@ -67,15 +70,14 @@ class _SongRow(ctk.CTkFrame):
         self._artist_lbl.pack(fill="x", pady=(8, 0))
 
         self._title_lbl = ctk.CTkLabel(
-            text_frame,
-            text="",
+            text_frame, text="",
             font=ctk.CTkFont(family="Segoe UI", size=12, weight="bold"),
             text_color=P["text_primary"],
             anchor="w",
         )
         self._title_lbl.pack(fill="x")
 
-        # Video badge (always present, hidden when no video)
+        # Video badge (always built, shown/hidden via pack)
         self._badge = ctk.CTkFrame(
             self, fg_color="#0a2a1a", corner_radius=4, width=22, height=22,
         )
@@ -86,34 +88,34 @@ class _SongRow(ctk.CTkFrame):
             text_color=P["success"],
         ).pack(expand=True)
 
-        # Bind events on all sub-widgets
+        # Bind events
         for w in [self, self._accent, text_frame, self._artist_lbl, self._title_lbl]:
             w.bind("<Button-1>", self._click)
             w.bind("<Enter>",    self._enter)
             w.bind("<Leave>",    self._leave)
 
     def bind_song(self, idx: int, song: SongEntry, selected: bool):
-        """Point this row at a new song without creating new widgets."""
+        """Rebind this row to a new song — no widget creation."""
         P = PALETTE
         self._idx = idx
         self._artist_lbl.configure(text=song.artist or "Unknown Artist")
-        self._title_lbl.configure(
-            text=song.title or song.folder.name,
-            text_color=P["text_primary"],
-        )
-        # Accent bar colour
-        bar_color = P["success"] if song.has_video else P["danger"]
-        self._accent.configure(fg_color=bar_color)
-        # Badge visibility
+        self._title_lbl.configure(text=song.title or song.folder.name,
+                                  text_color=P["text_primary"])
+        self._accent.configure(fg_color=P["success"] if song.has_video else P["danger"])
         if song.has_video:
             self._badge.pack(side="right", padx=(0, 8))
         else:
             self._badge.pack_forget()
-        # Selection highlight
-        self.configure(fg_color="#0d2245" if selected else P["bg_card"])
+        self._set_bg(_COL_ROW_SELECTED if selected else _COL_ROW_NORMAL)
 
     def set_selected(self, selected: bool):
-        self.configure(fg_color="#0d2245" if selected else PALETTE["bg_card"])
+        self._set_bg(_COL_ROW_SELECTED if selected else _COL_ROW_NORMAL)
+
+    def set_hovered(self, hovered: bool):
+        self._set_bg(_COL_ROW_HOVER if hovered else _COL_ROW_NORMAL)
+
+    def _set_bg(self, color: str):
+        self.configure(bg=color)
 
     def _click(self, _e):
         if self._idx >= 0:
@@ -453,9 +455,9 @@ class LibraryPanel(ctk.CTkFrame):
     def _on_enter(self, idx: int):
         for row in self._pool:
             if row._idx == idx and idx != self._selected_index:
-                row.configure(fg_color=PALETTE["bg_card_hover"])
+                row.set_hovered(True)
 
     def _on_leave(self, idx: int):
         for row in self._pool:
             if row._idx == idx and idx != self._selected_index:
-                row.configure(fg_color=PALETTE["bg_card"])
+                row.set_hovered(False)
