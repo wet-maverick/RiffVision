@@ -97,18 +97,15 @@ def _build_ydl_opts(
 ) -> dict:
     """
     Build yt-dlp options dict with EJS / Deno configuration.
-    yt-dlp >= 2024.x expects js_runtimes as a dict {runtime: {config}}
-    not a list. We set DENO_PATH env var so yt-dlp can locate the binary.
-
-    Cookie handling for age-gated videos:
-    We attempt to pass cookies from the user's browser automatically.
-    yt-dlp tries the specified browser and silently skips it if not found.
-    This bypasses age checks without storing any credentials.
+    All output is suppressed — errors are handled via exceptions only.
     """
     opts: dict = {
-        "quiet": True,
+        "quiet":       True,
         "no_warnings": True,
-        "noprogress": True,
+        "noprogress":  True,
+        # Route yt-dlp's own logger to /dev/null so cookie-not-found
+        # messages never appear in the terminal.
+        "logger":      _SilentLogger(),
     }
 
     if deno_path:
@@ -116,8 +113,6 @@ def _build_ydl_opts(
 
     opts["js_runtimes"] = {"deno": {}}
 
-    # Pass browser cookies for age-gated content.
-    # No credentials are stored — yt-dlp reads the browser's cookie store directly.
     if cookie_browser and cookie_browser != "none":
         opts["cookiesfrombrowser"] = (cookie_browser,)
 
@@ -125,6 +120,14 @@ def _build_ydl_opts(
         opts.update(extra)
 
     return opts
+
+
+class _SilentLogger:
+    """Drop all yt-dlp log messages — we handle errors via exceptions."""
+    def debug(self, msg):   pass
+    def info(self, msg):    pass
+    def warning(self, msg): pass
+    def error(self, msg):   pass
 
 
 def _thumbnail_url(video_id: str) -> str:
