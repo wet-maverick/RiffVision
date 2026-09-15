@@ -301,14 +301,30 @@ def download_video(
         ffmpeg_dir = None
 
     opts = _build_ydl_opts(deno_path, {
-        "format": "bestvideo[height<=1080][ext=mp4]+bestaudio[ext=m4a]/bestvideo[height<=1080]+bestaudio/best[height<=1080]/best",
+        # Force H.264 (avc1) video codec — Clone Hero's video renderer
+        # cannot play AV1 or VP9, which yt-dlp picks by default as
+        # "best quality". We explicitly exclude them at every fallback level.
+        #
+        # Format string priority (yt-dlp picks the first match):
+        #   1. Best H.264 mp4 video + best m4a audio ≤1080p  (ideal)
+        #   2. Best H.264 video (any container) + best audio ≤1080p
+        #   3. Best pre-muxed mp4 ≤1080p that is H.264
+        #   4. Any H.264 stream ≤1080p as last resort
+        #
+        # vcodec^=avc  means "video codec starts with 'avc'" which matches
+        # avc1, avc1.42001e etc. — all H.264 variants on YouTube.
+        "format": (
+            "bestvideo[vcodec^=avc][height<=1080][ext=mp4]+bestaudio[ext=m4a]"
+            "/bestvideo[vcodec^=avc][height<=1080]+bestaudio"
+            "/best[vcodec^=avc][height<=1080][ext=mp4]"
+            "/best[vcodec^=avc][height<=1080]"
+        ),
         "outtmpl": str(dest_folder / "video.%(ext)s"),
         "merge_output_format": "mp4",
         "progress_hooks": [_progress_hook],
         "noprogress": False,
         "quiet": True,
         "no_warnings": True,
-        # Post-processing: ensure output is video.mp4
         "postprocessors": [{
             "key": "FFmpegVideoConvertor",
             "preferedformat": "mp4",
